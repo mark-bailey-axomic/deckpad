@@ -19,11 +19,11 @@ export const TILE_COLORS = ['#34D399', '#0E5ECF', '#22D3EE', '#8B5CF6', '#F59E0B
 
 export const EMOJIS = ['🚀', '🛠', '📦', '🗄', '🔥', '⚡️', '🎯', '📸', '🧪', '☁️', '🔑', '🎧'] as const;
 
-export const SURFACES: Record<Surface, { bg: string; key: string; keyHi: string }> = {
+export const SURFACES: Record<Surface, { bg: string; key: string; keyHi: string }> = Object.freeze({
   'near-black': { bg: '#0E0E10', key: '#1A1A1E', keyHi: '#26262C' },
   charcoal: { bg: '#161619', key: '#202026', keyHi: '#2C2C34' },
   'ink-blue': { bg: '#0B0F17', key: '#161C28', keyHi: '#202A3A' }
-};
+});
 
 // Runner tuning (spec values)
 export const OUTPUT_RING_CAPACITY = 500; // lines per run

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -60,5 +60,61 @@ describe('config IPC', () => {
     const cfg = defaultConfig();
     await invoke(IPC.saveConfig, cfg);
     expect(deps.onConfigSaved).toHaveBeenCalledWith(expect.objectContaining({ version: 1 }));
+  });
+
+  // -------------------------------------------------------------------------
+  // NEW: reviewer-requested regression tests
+  // -------------------------------------------------------------------------
+
+  it('config:save rejects payload missing settings (deep validation)', async () => {
+    const bad = { version: 1, groups: [] }; // no settings, empty groups
+    await expect(invoke(IPC.saveConfig, bad)).rejects.toThrow(/invalid config/i);
+  });
+
+  it('config:save rejects payload with out-of-bounds grid (cols=9999)', async () => {
+    const bad = {
+      ...defaultConfig(),
+      grid: { cols: 9999, rows: 3 }
+    };
+    await expect(invoke(IPC.saveConfig, bad)).rejects.toThrow(/invalid config/i);
+  });
+
+  it('config:get returns prior config unchanged after a rejected save', async () => {
+    // Establish a known-good config first
+    const good = defaultConfig();
+    good.settings.accent = '#8B5CF6';
+    await invoke(IPC.saveConfig, good);
+
+    // Attempt a bad save
+    const bad = { version: 1, groups: [] };
+    await expect(invoke(IPC.saveConfig, bad)).rejects.toThrow();
+
+    // Store should still have the good config
+    const current = await invoke<Config>(IPC.getConfig);
+    expect(current.settings.accent).toBe('#8B5CF6');
+  });
+
+  it('config:save still resolves (and persists) when onConfigSaved throws', async () => {
+    // Re-register IPC with a throwing hook
+    handlers.clear();
+    const throwingDeps: IpcDeps = {
+      store: new ConfigStore(dir),
+      onConfigSaved: vi.fn().mockImplementation(() => { throw new Error('hook exploded'); })
+    } as unknown as IpcDeps;
+    registerIpc(throwingDeps);
+
+    const cfg = defaultConfig();
+    cfg.settings.accent = '#F59E0B';
+
+    // Should NOT reject even though the hook throws
+    await expect(invoke(IPC.saveConfig, cfg)).resolves.not.toThrow();
+
+    // File must have been written
+    const onDisk = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8'));
+    expect(onDisk.settings.accent).toBe('#F59E0B');
+
+    // Store must reflect the save
+    const reloaded = await invoke<Config>(IPC.getConfig);
+    expect(reloaded.settings.accent).toBe('#F59E0B');
   });
 });

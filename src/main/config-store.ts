@@ -1,7 +1,8 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, writeSync, fsyncSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DEFAULT_ACCENT, DEFAULT_GRID } from '@shared/constants';
+import { validateConfig } from '@shared/config-validate';
 import type { Config } from '@shared/types';
 
 export function defaultConfig(): Config {
@@ -32,18 +33,37 @@ export class ConfigStore {
     try {
       const parsed: unknown = JSON.parse(readFileSync(this.file, 'utf8'));
       if ((parsed as { version?: unknown })?.version !== 1) throw new Error('unsupported config version');
-      return parsed as Config;
+      if (!validateConfig(parsed)) throw new Error('invalid config shape');
+      return parsed;
     } catch {
       // Corrupt or future-versioned: back the file up and start fresh.
-      copyFileSync(this.file, `${this.file}.bak-${Date.now()}`);
-      return defaultConfig();
+      try {
+        copyFileSync(this.file, `${this.file}.bak-${Date.now()}`);
+      } catch {
+        // Backup failure is non-fatal — proceed with defaults.
+      }
+      const defaults = defaultConfig();
+      // Best-effort: persist defaults so subsequent launches don't re-backup.
+      try {
+        this.save(defaults);
+      } catch {
+        // Save failure is non-fatal — return in-memory defaults.
+      }
+      return defaults;
     }
   }
 
   save(cfg: Config): void {
     mkdirSync(this.dir, { recursive: true });
-    const tmp = `${this.file}.tmp`;
-    writeFileSync(tmp, JSON.stringify(cfg, null, 2), 'utf8');
+    const tmp = `${this.file}.${process.pid}-${Math.random().toString(36).slice(2)}.tmp`;
+    const data = JSON.stringify(cfg, null, 2);
+    const fd = openSync(tmp, 'w');
+    try {
+      writeSync(fd, data, 0, 'utf8');
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
     renameSync(tmp, this.file);
   }
 }

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -75,5 +75,50 @@ describe('ConfigStore', () => {
     const cfg = new ConfigStore(dir).load();
     expect(cfg.version).toBe(1);
     expect(readdirSync(dir).some((f) => f.startsWith('config.json.bak-'))).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // NEW: reviewer-requested regression tests
+  // -------------------------------------------------------------------------
+
+  it('load() treats invalid-shape-but-valid-JSON as corrupt and creates .bak-*', () => {
+    // valid JSON but fails deep shape validation (no settings, empty groups)
+    writeFileSync(join(dir, 'config.json'), JSON.stringify({ version: 1, groups: [] }), 'utf8');
+    const store = new ConfigStore(dir);
+    const cfg = store.load();
+    expect(cfg.groups[0].name).toBe('Actions'); // got defaults
+    const backups = readdirSync(dir).filter((f) => f.startsWith('config.json.bak-'));
+    expect(backups).toHaveLength(1);
+  });
+
+  it('load() returns defaults even when backup write fails (read-only dir)', () => {
+    writeFileSync(join(dir, 'config.json'), '{not json!!', 'utf8');
+    // Make dir read-only so copyFileSync cannot create the .bak file
+    chmodSync(dir, 0o555);
+    const store = new ConfigStore(dir);
+    let cfg: ReturnType<typeof store.load> | undefined;
+    try {
+      expect(() => { cfg = store.load(); }).not.toThrow();
+      expect(cfg?.version).toBe(1);
+    } finally {
+      chmodSync(dir, 0o755); // restore perms so afterEach can rmSync
+    }
+  });
+
+  it('failed save preserves previous config.json', () => {
+    const store = new ConfigStore(dir);
+    const first = defaultConfig();
+    first.settings.accent = '#F04438';
+    store.save(first);
+
+    // Create a circular reference to force JSON.stringify to throw
+    const circular = defaultConfig() as any;
+    circular.self = circular;
+
+    expect(() => store.save(circular as never)).toThrow();
+
+    // The original file must still contain the first config
+    const onDisk = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8'));
+    expect(onDisk.settings.accent).toBe('#F04438');
   });
 });

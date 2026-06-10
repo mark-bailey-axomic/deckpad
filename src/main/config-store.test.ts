@@ -1,8 +1,19 @@
 import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigStore, defaultConfig } from './config-store';
+
+vi.mock('node:fs', async (importOriginal) => {
+  const real = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...real,
+    fsyncSync: vi.fn((fd: number) => {
+      if ((globalThis as any).__failFsync) throw new Error('EIO');
+      return real.fsyncSync(fd);
+    }),
+  };
+});
 
 let dir: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'deckpad-')); });
@@ -120,5 +131,29 @@ describe('ConfigStore', () => {
     // The original file must still contain the first config
     const onDisk = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8'));
     expect(onDisk.settings.accent).toBe('#F04438');
+  });
+
+  it('mid-write failure cleans up stranded .tmp and preserves previous config.json', () => {
+    const store = new ConfigStore(dir);
+    const first = defaultConfig();
+    first.settings.accent = '#AABBCC';
+    store.save(first);
+
+    const second = defaultConfig();
+    second.settings.accent = '#112233';
+
+    try {
+      (globalThis as any).__failFsync = true;
+      expect(() => store.save(second)).toThrow();
+    } finally {
+      (globalThis as any).__failFsync = false;
+    }
+
+    // No stranded .tmp files
+    expect(readdirSync(dir).filter((f) => f.endsWith('.tmp'))).toHaveLength(0);
+
+    // Previous config.json is intact
+    const onDisk = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8'));
+    expect(onDisk.settings.accent).toBe('#AABBCC');
   });
 });

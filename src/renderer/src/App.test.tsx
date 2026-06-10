@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { StrictMode } from 'react';
 import { App } from './App';
 import { getDeck } from './lib/deck';
-import type { Button } from '@shared/types';
+import type { Button, DeckApi } from '@shared/types';
 
 vi.mock('./lib/deck', async () => {
   const { createMockDeck } = await import('./lib/deck-mock');
@@ -104,7 +104,7 @@ describe('App shell', () => {
 // ---------------------------------------------------------------------------
 
 describe('App — StrictMode purity (double-invoke)', () => {
-  let saveConfigSpy: ReturnType<typeof vi.spyOn>;
+  let saveConfigSpy: MockInstance<DeckApi['saveConfig']>;
 
   beforeEach(async () => {
     await seedConfig([]);
@@ -142,13 +142,13 @@ describe('App — StrictMode purity (double-invoke)', () => {
 
     // The saved config should have a single consistent id for Group 2
     const savedArg = saveConfigSpy.mock.calls[0][0];
-    const savedGroup = savedArg.groups.find((g: { name: string }) => g.name === 'Group 2');
+    const savedGroup = savedArg.groups.find((g) => g.name === 'Group 2');
     expect(savedGroup?.id).toBe(persistedGroup!.id);
   });
 });
 
 describe('App — save failure surfaces a toast', () => {
-  let saveConfigSpy: ReturnType<typeof vi.spyOn>;
+  let saveConfigSpy: MockInstance<DeckApi['saveConfig']>;
 
   beforeEach(async () => {
     await seedConfig([]);
@@ -174,7 +174,7 @@ describe('App — save failure surfaces a toast', () => {
 });
 
 describe('App — deleting a running button stops it and clears the pill', () => {
-  let stopActionSpy: ReturnType<typeof vi.spyOn>;
+  let stopActionSpy: MockInstance<DeckApi['stopAction']>;
 
   beforeEach(async () => {
     await seedConfig([button('run1', 'LongJob')]);

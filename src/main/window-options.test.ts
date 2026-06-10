@@ -14,5 +14,6 @@ describe('baseWindowOptions', () => {
   it('is frameless and not user-resizable', () => {
     expect(opts.frame).toBe(false);
     expect(opts.resizable).toBe(false);
+    expect(opts.show).toBe(false);
   });
 });

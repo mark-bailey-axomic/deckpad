@@ -1,5 +1,303 @@
-import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
+import { BAR_H, GLOW, GRID_LIMITS, KEY_SIZE, GAP, PAD, RADIUS, SURFACES, TABS_H } from '@shared/constants';
+import type { Button, Config, Group } from '@shared/types';
+import { getDeck } from './lib/deck';
+import { useActionStates, type FailInfo } from './hooks/useActionStates';
+import { useNowTick } from './hooks/useNowTick';
+import { Key } from './components/Key';
+import { DeckIcon } from './components/DeckIcon';
+import { Toast, type ToastState } from './components/Toast';
+import { ContextMenu, type MenuState } from './components/ContextMenu';
+import { EditModal, newDraft, type ModalDraft } from './components/EditModal';
+import { ActivityPanel, type ActivityItem } from './components/ActivityPanel';
+import { Settings, type SettingsValues } from './components/Settings';
+import { Stepper } from './components/Stepper';
 
-export function App(): React.JSX.Element {
-  return <div className="dp-window">DeckPad</div>;
+const deck = getDeck();
+
+const IDLE_RUNTIME = { state: 'idle' as const, log: [], failedDot: false };
+
+export function App(): ReactElement | null {
+  const [config, setConfig] = useState<Config | null>(null);
+  const [active, setActive] = useState(0);
+  const [editMode, setEditMode] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [gridPop, setGridPop] = useState(false);
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const [modal, setModal] = useState<{ draft: ModalDraft; index: number } | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [pressedId, setPressedId] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ gi: number; value: string } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { void deck.getConfig().then(setConfig); }, []);
+
+  // Stable read of the latest config for callbacks (avoids stale closures).
+  const configRef = useRef<Config | null>(null);
+  configRef.current = config;
+
+  /** Single mutate-and-persist path: every config change flows through here. */
+  const commit = useCallback((fn: (prev: Config) => Config) => {
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const next = fn(prev);
+      void deck.saveConfig(next);
+      return next;
+    });
+  }, []);
+
+  const showToast = useCallback((t: ToastState) => {
+    setToast(t);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 6000);
+  }, []);
+
+  const onFail = useCallback((f: FailInfo) => {
+    const cfg = configRef.current;
+    const label = cfg ? findLabel(cfg, f.buttonId) : f.buttonId;
+    showToast({ kind: 'fail', buttonId: f.buttonId, label, exit: f.exit });
+  }, [showToast]);
+
+  const { runtimes, press, stop } = useActionStates(deck, onFail);
+  const runningCount = useMemo(
+    () => [...runtimes.values()].filter((r) => r.state === 'running').length,
+    [runtimes]
+  );
+  const now = useNowTick(runningCount > 0);
+
+  // close menus on global click / esc (prototype lines 247–253)
+  useEffect(() => {
+    const onDoc = () => { setMenu(null); setGridPop(false); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setMenu(null); setModal(null); setSettingsOpen(false); setGridPop(false); setRenaming(null); }
+    };
+    document.addEventListener('click', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('click', onDoc); document.removeEventListener('keydown', onKey); };
+  }, []);
+
+  if (!config) return null;
+  const { cols, rows } = config.grid;
+  const activeIndex = Math.min(active, config.groups.length - 1);
+  const group = config.groups[activeIndex];
+  const accent = config.settings.accent;
+  const surf = SURFACES[config.settings.surface];
+  const actionCount = group.slots.filter(Boolean).length;
+
+  // ---- slot/group mutations (all via commit) ----
+  const setSlots = (fn: (slots: (Button | null)[]) => (Button | null)[]) =>
+    commit((cfg) => ({
+      ...cfg,
+      groups: cfg.groups.map((g, i) => (i === Math.min(active, cfg.groups.length - 1) ? { ...g, slots: fn(g.slots) } : g))
+    }));
+
+  const pressKey = (idx: number) => {
+    const b = group.slots[idx];
+    if (!b) { setModal({ draft: newDraft(), index: idx }); return; }
+    if (editMode) { setModal({ draft: { ...structuredClone(b), isNew: false }, index: idx }); return; }
+    setPressedId(b.id);
+    setTimeout(() => setPressedId(null), 160);
+    press(b);
+  };
+
+  const saveModal = (button: Button) => {
+    const idx = modal!.index;
+    setSlots((slots) => slots.map((s, i) => (i === idx ? button : s)));
+    setModal(null);
+  };
+
+  const addGroup = () => {
+    const nextIndex = config.groups.length;
+    commit((cfg) => ({
+      ...cfg,
+      groups: [...cfg.groups, { id: crypto.randomUUID(), name: `Group ${cfg.groups.length + 1}`, slots: Array(cols * rows).fill(null) } satisfies Group]
+    }));
+    setActive(nextIndex);
+  };
+
+  // Group-delete confirm flow lands in Task 28; instant delete until then.
+  const deleteGroup = (gi: number) => {
+    if (config.groups.length <= 1) return;
+    commit((cfg) => ({ ...cfg, groups: cfg.groups.filter((_, i) => i !== gi) }));
+    setActive((a) => Math.max(0, gi <= a ? a - 1 : a));
+  };
+
+  const commitRename = () => {
+    if (!renaming) return;
+    const { gi, value } = renaming;
+    commit((cfg) => ({ ...cfg, groups: cfg.groups.map((g, i) => (i === gi ? { ...g, name: value.trim() || 'Untitled' } : g)) }));
+    setRenaming(null);
+  };
+
+  // ---- context menu actions ----
+  const ctxEdit = () => {
+    if (!menu) return;
+    const b = group.slots[menu.index];
+    setMenu(null);
+    if (b) setModal({ draft: { ...structuredClone(b), isNew: false }, index: menu.index });
+  };
+  // Duplicate stub: real first-empty-slot logic lands in Task 28.
+  const ctxDuplicate = () => setMenu(null);
+  const ctxDelete = () => {
+    if (!menu) return;
+    const idx = menu.index;
+    setSlots((slots) => slots.map((s, i) => (i === idx ? null : s)));
+    setMenu(null);
+  };
+
+  // ---- settings (side-effect wiring lands in Task 29) ----
+  const onSettingsChange = (patch: Partial<SettingsValues>) => {
+    const { cols: pCols, rows: pRows, ...rest } = patch;
+    commit((cfg) => ({
+      ...cfg,
+      grid: {
+        cols: pCols ?? cfg.grid.cols,
+        rows: pRows ?? cfg.grid.rows
+      },
+      settings: { ...cfg.settings, ...rest }
+    }));
+  };
+
+  // Activity panel items: running first, then failed-dot entries (persist until next run)
+  const panelItems: ActivityItem[] = config.groups.flatMap((g) =>
+    g.slots.filter((s): s is Button => s !== null).flatMap((b): ActivityItem[] => {
+      const rt = runtimes.get(b.id);
+      if (!rt) return [];
+      if (rt.state === 'running') return [{ button: b, groupName: g.name, state: 'running' as const, startedAt: rt.startedAt, log: rt.log }];
+      if (rt.state === 'failed' || rt.failedDot)
+        return [{ button: b, groupName: g.name, state: 'failed' as const, log: rt.log, exit: rt.exit ?? 1, ranFor: rt.ranFor ?? 0 }];
+      return [];
+    })
+  );
+
+  return (
+    <div
+      className="dp-window"
+      style={{
+        width: '100%', height: '100%',
+        background: surf.bg,
+        '--accent': accent, '--key': surf.key, '--key-hi': surf.keyHi,
+        '--glow': GLOW, '--radius': `${RADIUS}px`
+      } as CSSProperties}
+    >
+      {/* top bar */}
+      <div className="dp-bar" style={{ height: BAR_H }}>
+        <div className="dp-brand">
+          <span className="dp-mark" style={{ background: accent }}><DeckIcon name="bolt" size={13} style={{ color: '#0b0b0d' }} /></span>
+          <span className="dp-brand-name">DeckPad</span>
+        </div>
+        {runningCount > 0 && (
+          <button className="dp-pill" onClick={(e) => { e.stopPropagation(); setPanelOpen((o) => !o); }}>
+            <span className="dp-pill-dot" style={{ background: accent }} />
+            {runningCount} running
+          </button>
+        )}
+        <div className="dp-bar-right">
+          <div className="dp-grid-ctrl" onClick={(e) => e.stopPropagation()}>
+            <button className={'dp-icon-btn' + (gridPop ? ' is-active' : '')} onClick={() => setGridPop((p) => !p)} title="Grid size">
+              <DeckIcon name="app" size={17} /><span className="dp-grid-label">{cols}×{rows}</span>
+            </button>
+            {gridPop && (
+              <div className="dp-grid-pop">
+                <div className="dp-pop-row">
+                  <span>Columns</span>
+                  <Stepper value={cols} min={GRID_LIMITS.cols.min} max={GRID_LIMITS.cols.max}
+                    onChange={(v) => commit((cfg) => ({ ...cfg, grid: { ...cfg.grid, cols: v } }))} suffix="" />
+                </div>
+                <div className="dp-pop-row">
+                  <span>Rows</span>
+                  <Stepper value={rows} min={GRID_LIMITS.rows.min} max={GRID_LIMITS.rows.max}
+                    onChange={(v) => commit((cfg) => ({ ...cfg, grid: { ...cfg.grid, rows: v } }))} suffix="" />
+                </div>
+              </div>
+            )}
+          </div>
+          <button className={'dp-icon-btn' + (editMode ? ' is-active' : '')} onClick={() => setEditMode((e2) => !e2)} title="Edit layout">
+            <DeckIcon name="pencil" size={17} />
+          </button>
+          <button className={'dp-icon-btn' + (settingsOpen ? ' is-active' : '')} onClick={(e) => { e.stopPropagation(); setSettingsOpen((o) => !o); }} title="Settings">
+            <DeckIcon name="gear" size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* group tabs */}
+      <div className="dp-tabs" style={{ height: TABS_H }} onClick={(e) => e.stopPropagation()}>
+        <div className="dp-tabs-scroll">
+          {config.groups.map((g, gi) => {
+            const isActive = gi === activeIndex;
+            const hasRunning = g.slots.some((k) => k && runtimes.get(k.id)?.state === 'running');
+            const isRenaming = renaming !== null && renaming.gi === gi;
+            return (
+              <div key={g.id} className={'dp-tab' + (isActive ? ' is-active' : '')}
+                onClick={() => { setActive(gi); setRenaming(null); }}
+                onDoubleClick={() => setRenaming({ gi, value: g.name })}
+                title="Double-click to rename">
+                {hasRunning && <span className="dp-tab-dot" style={{ background: accent }} />}
+                {isRenaming ? (
+                  <input className="dp-tab-input" autoFocus value={renaming.value}
+                    onChange={(e) => setRenaming({ gi, value: e.target.value })}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={commitRename}
+                    onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenaming(null); }} />
+                ) : <span className="dp-tab-name">{g.name}</span>}
+                {editMode && config.groups.length > 1 && !isRenaming && (
+                  <span className="dp-tab-del" role="button" aria-label="Delete group"
+                    onClick={(e) => { e.stopPropagation(); deleteGroup(gi); }}><DeckIcon name="close" size={11} /></span>
+                )}
+              </div>
+            );
+          })}
+          <button className="dp-tab-add" onClick={addGroup} title="New group"><DeckIcon name="plus" size={15} /></button>
+        </div>
+        <span className="dp-tabs-count">{actionCount} action{actionCount === 1 ? '' : 's'}</span>
+      </div>
+
+      {/* grid */}
+      <div className="dp-grid" key={group.id} style={{
+        gridTemplateColumns: `repeat(${cols}, ${KEY_SIZE}px)`,
+        gridTemplateRows: `repeat(${rows}, ${KEY_SIZE}px)`,
+        gap: GAP, padding: PAD
+      }}>
+        {group.slots.map((s, idx) => (
+          <Key key={idx} button={s}
+            runtime={(s && runtimes.get(s.id)) ?? IDLE_RUNTIME}
+            now={now} accent={accent} editMode={editMode}
+            showLabels={config.settings.showLabels}
+            pressed={pressedId !== null && pressedId === s?.id}
+            dragOver={false}
+            onPress={() => pressKey(idx)}
+            onStop={() => { if (s) stop(s.id); }}
+            onContext={(e) => { e.preventDefault(); e.stopPropagation(); if (s) setMenu({ x: e.clientX, y: e.clientY, index: idx }); }}
+            onDelete={() => setSlots((slots) => slots.map((k, j) => (j === idx ? null : k)))}
+            onDragStart={() => {}}
+            onDragOver={() => {}}
+            onDrop={() => {}} />
+        ))}
+      </div>
+
+      <ActivityPanel open={panelOpen} items={panelItems} now={now} accent={accent}
+        onStop={stop} onClose={() => setPanelOpen(false)} />
+      <Settings open={settingsOpen}
+        settings={{ cols, rows, accent, surface: config.settings.surface, showLabels: config.settings.showLabels, launchStartup: config.settings.launchStartup, alwaysOnTop: config.settings.alwaysOnTop }}
+        onChange={onSettingsChange}
+        onClose={() => setSettingsOpen(false)} />
+
+      <div className="dp-toast-layer">
+        <Toast toast={toast} onView={() => { setPanelOpen(true); setToast(null); }} onClose={() => setToast(null)} />
+      </div>
+
+      <ContextMenu menu={menu} onEdit={ctxEdit} onDuplicate={ctxDuplicate} onDelete={ctxDelete} />
+      <EditModal open={modal !== null} draft={modal?.draft ?? null} accent={accent}
+        onSave={saveModal} onCancel={() => setModal(null)}
+        pickFile={(kind) => deck.pickFile(kind)}
+        extractIcon={(path, buttonId) => deck.extractIcon(path, buttonId)} />
+    </div>
+  );
+}
+
+function findLabel(cfg: Config, buttonId: string): string {
+  for (const g of cfg.groups) for (const s of g.slots) if (s?.id === buttonId) return s.label;
+  return buttonId;
 }

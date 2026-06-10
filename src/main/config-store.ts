@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, writeSync, fsyncSync, closeSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeSync, fsyncSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DEFAULT_ACCENT, DEFAULT_GRID } from '@shared/constants';
@@ -59,11 +59,16 @@ export class ConfigStore {
     const data = JSON.stringify(cfg, null, 2);
     const fd = openSync(tmp, 'w');
     try {
-      writeSync(fd, data, 0, 'utf8');
-      fsyncSync(fd);
-    } finally {
-      closeSync(fd);
+      try {
+        writeSync(fd, data, 0, 'utf8');
+        fsyncSync(fd);
+      } finally {
+        closeSync(fd);
+      }
+      renameSync(tmp, this.file);
+    } catch (err) {
+      try { unlinkSync(tmp); } catch { /* best-effort */ }
+      throw err;
     }
-    renameSync(tmp, this.file);
   }
 }

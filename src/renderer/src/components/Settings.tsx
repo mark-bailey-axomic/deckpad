@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import type { Surface } from '@shared/types';
-import { ACCENTS } from '@shared/constants';
+import { ACCENTS, GRID_LIMITS } from '@shared/constants';
 import { DeckIcon } from './DeckIcon';
 import { Stepper } from './Stepper';
 import { ToggleRow } from './ToggleRow';
@@ -41,9 +41,9 @@ export function Settings({ open, settings, onChange, onClose }: SettingsProps): 
         <div className="dp-field">
           <label className="dp-field-label">Grid size</label>
           <div className="dp-stepper-row">
-            <Stepper value={settings.cols} min={2} max={6} onChange={(v) => onChange({ cols: v })} suffix="cols" />
+            <Stepper value={settings.cols} min={GRID_LIMITS.cols.min} max={GRID_LIMITS.cols.max} onChange={(v) => onChange({ cols: v })} suffix="cols" />
             <span className="dp-times">×</span>
-            <Stepper value={settings.rows} min={2} max={5} onChange={(v) => onChange({ rows: v })} suffix="rows" />
+            <Stepper value={settings.rows} min={GRID_LIMITS.rows.min} max={GRID_LIMITS.rows.max} onChange={(v) => onChange({ rows: v })} suffix="rows" />
           </div>
         </div>
 

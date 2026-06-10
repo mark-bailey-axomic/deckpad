@@ -87,6 +87,14 @@ export function EditModal(props: EditModalProps): ReactElement | null {
 
   const handleSave = () => {
     const { isNew: _isNew, autoFrom: _autoFrom, ...button } = d;
+    // Drop fields that don't apply to the chosen type so stale values never persist.
+    if (button.type === 'command') {
+      delete button.path;
+    } else {
+      delete button.command;
+      delete button.cwd;
+      delete button.showTerminal;
+    }
     onSave(button);
   };
 

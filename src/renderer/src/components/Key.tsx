@@ -28,7 +28,7 @@ const TYPE_GLYPH: Record<Button['type'], DeckIconName> = { command: 'terminal', 
 function KeyGlyph({ button, accent }: { button: Button; accent: string }): ReactElement {
   const { icon } = button;
   const [imgFailed, setImgFailed] = useState(false);
-  useEffect(() => setImgFailed(false), [icon.kind, icon.sourcePath, button.path]);
+  useEffect(() => setImgFailed(false), [button.id, icon.kind, icon.sourcePath, button.path]);
   const letters = deriveLetters(button.label);
 
   if (icon.kind === 'letter' || imgFailed) {

@@ -37,21 +37,21 @@ export function App(): ReactElement | null {
   const configRef = useRef<Config | null>(null);
   configRef.current = config;
 
-  /** Single mutate-and-persist path: every config change flows through here. */
-  const commit = useCallback((fn: (prev: Config) => Config) => {
-    setConfig((prev) => {
-      if (!prev) return prev;
-      const next = fn(prev);
-      void deck.saveConfig(next);
-      return next;
-    });
-  }, []);
-
   const showToast = useCallback((t: ToastState) => {
     setToast(t);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 6000);
   }, []);
+
+  /** Single mutate-and-persist path: every config change flows through here. */
+  const commit = useCallback((fn: (prev: Config) => Config) => {
+    const prev = configRef.current;
+    if (!prev) return;
+    const next = fn(prev);
+    configRef.current = next;
+    deck.saveConfig(next).catch(() => showToast({ kind: 'info', message: 'Could not save changes' }));
+    setConfig(next);
+  }, [showToast]);
 
   const onFail = useCallback((f: FailInfo) => {
     const cfg = configRef.current;
@@ -60,10 +60,13 @@ export function App(): ReactElement | null {
   }, [showToast]);
 
   const { runtimes, press, stop } = useActionStates(deck, onFail);
-  const runningCount = useMemo(
-    () => [...runtimes.values()].filter((r) => r.state === 'running').length,
-    [runtimes]
-  );
+  // Count only buttons that still exist in the config — deleted/stale ids must not show.
+  const runningCount = useMemo(() => {
+    if (!config) return 0;
+    return config.groups
+      .flatMap((g) => g.slots)
+      .filter((s) => s && runtimes.get(s.id)?.state === 'running').length;
+  }, [config, runtimes]);
   const now = useNowTick(runningCount > 0);
 
   // close menus on global click / esc (prototype lines 247–253)
@@ -86,6 +89,12 @@ export function App(): ReactElement | null {
   const actionCount = group.slots.filter(Boolean).length;
 
   // ---- slot/group mutations (all via commit) ----
+  /** Deleting a button must also stop its process if one is active. */
+  const stopIfActive = (id: string) => {
+    const st = runtimes.get(id)?.state;
+    if (st === 'running' || st === 'launching') stop(id);
+  };
+
   const setSlots = (fn: (slots: (Button | null)[]) => (Button | null)[]) =>
     commit((cfg) => ({
       ...cfg,
@@ -119,6 +128,7 @@ export function App(): ReactElement | null {
   // Group-delete confirm flow lands in Task 28; instant delete until then.
   const deleteGroup = (gi: number) => {
     if (config.groups.length <= 1) return;
+    config.groups[gi].slots.forEach((s) => { if (s) stopIfActive(s.id); });
     commit((cfg) => ({ ...cfg, groups: cfg.groups.filter((_, i) => i !== gi) }));
     setActive((a) => Math.max(0, gi <= a ? a - 1 : a));
   };
@@ -142,6 +152,8 @@ export function App(): ReactElement | null {
   const ctxDelete = () => {
     if (!menu) return;
     const idx = menu.index;
+    const b = group.slots[idx];
+    if (b) stopIfActive(b.id);
     setSlots((slots) => slots.map((s, i) => (i === idx ? null : s)));
     setMenu(null);
   };
@@ -270,7 +282,7 @@ export function App(): ReactElement | null {
             onPress={() => pressKey(idx)}
             onStop={() => { if (s) stop(s.id); }}
             onContext={(e) => { e.preventDefault(); e.stopPropagation(); if (s) setMenu({ x: e.clientX, y: e.clientY, index: idx }); }}
-            onDelete={() => setSlots((slots) => slots.map((k, j) => (j === idx ? null : k)))}
+            onDelete={() => { if (s) stopIfActive(s.id); setSlots((slots) => slots.map((k, j) => (j === idx ? null : k))); }}
             onDragStart={() => {}}
             onDragOver={() => {}}
             onDrop={() => {}} />

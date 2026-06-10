@@ -24,11 +24,19 @@ export interface ActivityPanelProps {
 
 export function ActivityPanel({ open, items, now, accent, onStop, onClose }: ActivityPanelProps): ReactElement {
   const scrollRefs = useRef<Record<string, HTMLPreElement | null>>({});
+  const prevLogLens = useRef<Record<string, number>>({});
 
+  // Autoscroll a log only when it gained lines, so user scroll position survives ticks.
   useEffect(() => {
-    Object.values(scrollRefs.current).forEach((el) => {
-      if (el) el.scrollTop = el.scrollHeight;
+    const lens: Record<string, number> = {};
+    items.forEach((it) => {
+      lens[it.button.id] = it.log.length;
+      const el = scrollRefs.current[it.button.id];
+      if (el && it.log.length > (prevLogLens.current[it.button.id] ?? 0)) {
+        el.scrollTop = el.scrollHeight;
+      }
     });
+    prevLogLens.current = lens;
   });
 
   return (

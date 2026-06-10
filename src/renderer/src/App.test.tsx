@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
 import { App } from './App';
 import { getDeck } from './lib/deck';
 import type { Button } from '@shared/types';
@@ -95,5 +96,122 @@ describe('App shell', () => {
       const cfg = await getDeck().getConfig();
       expect(cfg.groups).toHaveLength(2);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 3 review findings — all tests below should be RED until fixed
+// ---------------------------------------------------------------------------
+
+describe('App — StrictMode purity (double-invoke)', () => {
+  let saveConfigSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    await seedConfig([]);
+    saveConfigSpy = vi.spyOn(getDeck(), 'saveConfig');
+    saveConfigSpy.mockClear();
+  });
+
+  afterEach(() => {
+    saveConfigSpy.mockRestore();
+  });
+
+  it('addGroup calls saveConfig exactly once and the persisted group id matches the tab', async () => {
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>
+    );
+    await screen.findByText('Actions'); // config loaded
+
+    // Clear any calls from the initial getConfig/render cycle
+    saveConfigSpy.mockClear();
+
+    fireEvent.click(screen.getByTitle('New group'));
+
+    // Wait for the new tab to appear
+    await screen.findByText('Group 2');
+
+    // Should be exactly 1 saveConfig call for this one mutation
+    expect(saveConfigSpy).toHaveBeenCalledTimes(1);
+
+    // The persisted group id must equal the id rendered in the DOM
+    const cfg = await getDeck().getConfig();
+    const persistedGroup = cfg.groups.find((g) => g.name === 'Group 2');
+    expect(persistedGroup).toBeDefined();
+
+    // The saved config should have a single consistent id for Group 2
+    const savedArg = saveConfigSpy.mock.calls[0][0];
+    const savedGroup = savedArg.groups.find((g: { name: string }) => g.name === 'Group 2');
+    expect(savedGroup?.id).toBe(persistedGroup!.id);
+  });
+});
+
+describe('App — save failure surfaces a toast', () => {
+  let saveConfigSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    await seedConfig([]);
+    saveConfigSpy = vi.spyOn(getDeck(), 'saveConfig');
+  });
+
+  afterEach(() => {
+    saveConfigSpy.mockRestore();
+  });
+
+  it('shows an info toast instead of an unhandled rejection when saveConfig rejects', async () => {
+    // Make the first save (from addGroup) reject
+    saveConfigSpy.mockRejectedValueOnce(new Error('disk full'));
+
+    render(<App />);
+    await screen.findByText('Actions');
+
+    fireEvent.click(screen.getByTitle('New group'));
+
+    // A toast (role="status") should appear instead of an unhandled rejection
+    await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument());
+  });
+});
+
+describe('App — deleting a running button stops it and clears the pill', () => {
+  let stopActionSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    await seedConfig([button('run1', 'LongJob')]);
+    stopActionSpy = vi.spyOn(getDeck(), 'stopAction');
+  });
+
+  afterEach(() => {
+    stopActionSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it('right-click → Delete calls stopAction and removes the running pill', async () => {
+    vi.useFakeTimers();
+
+    render(<App />);
+    await vi.waitFor(() => expect(screen.queryByText('LongJob')).toBeTruthy());
+
+    // Find the filled key before clicking (label still shows while idle)
+    const filledKey = document.querySelector('.dp-key--filled')!;
+    expect(filledKey).toBeTruthy();
+
+    // Click the button to start it running
+    fireEvent.click(filledKey);
+    await vi.advanceTimersByTimeAsync(600); // started (200 ms) + reveal (300 ms) + buffer
+
+    expect(screen.getByText('1 running')).toBeInTheDocument();
+
+    // Right-click the running key (label replaced by timer when running, use the key element directly)
+    fireEvent.contextMenu(filledKey);
+    expect(screen.getByText('Delete')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Delete'));
+
+    // stopAction should have been called for the button that was running
+    expect(stopActionSpy).toHaveBeenCalledWith('run1');
+
+    // Running pill should disappear
+    await vi.waitFor(() => expect(screen.queryByText('1 running')).toBeNull());
   });
 });

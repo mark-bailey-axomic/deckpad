@@ -60,7 +60,12 @@ export function useActionStates(deck: DeckApi, onFail: (f: FailInfo) => void) {
   useEffect(() => {
     void deck.getRunning().then((snaps) => {
       snaps.forEach((s) =>
-        update(s.buttonId, () => ({ state: 'running', startedAt: s.startedAt, log: s.output, failedDot: false }))
+        // A late snapshot must not resurrect a run that already settled (success/failed/etc.).
+        update(s.buttonId, (prev) =>
+          prev.state === 'idle'
+            ? { state: 'running', startedAt: s.startedAt, log: s.output, failedDot: false }
+            : prev
+        )
       );
     });
 
@@ -92,7 +97,12 @@ export function useActionStates(deck: DeckApi, onFail: (f: FailInfo) => void) {
         }
       }
     });
-    return off;
+    const pending = timers.current;
+    return () => {
+      off();
+      pending.forEach((t) => clearTimeout(t));
+      pending.clear();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deck]);
 

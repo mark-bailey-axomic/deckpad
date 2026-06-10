@@ -124,4 +124,62 @@ describe('useActionStates', () => {
     expect(rt.startedAt).toBe(555);
     expect(rt.log).toEqual(['hello']);
   });
+
+  // -------------------------------------------------------------------------
+  // Phase 3 review findings — tests below should be RED until fixed
+  // -------------------------------------------------------------------------
+
+  it('unmount clears pending timers — vi.getTimerCount() is 0 immediately after unmount', async () => {
+    const { deck, emit } = fakeDeck();
+    const { result, unmount } = renderHook(() => useActionStates(deck, () => {}));
+
+    // Start a press so the RUNNING_REVEAL_MS timer is armed
+    await act(async () => { result.current.press(cmdButton); });
+    act(() => emit({ type: 'started', buttonId: 'b1', startedAt: Date.now() }));
+
+    // The reveal timer should be pending right now
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    // Unmount — the hook must cancel all its pending timers
+    unmount();
+
+    // After unmount, no timers should remain — this is the contract under test
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('late getRunning snapshot does not resurrect an already-exited run', async () => {
+    // Control the getRunning promise so we can resolve it after the exit event
+    let resolveRunning!: (snaps: import('@shared/types').RunningSnapshot[]) => void;
+    const getRunningPromise = new Promise<import('@shared/types').RunningSnapshot[]>(
+      (res) => { resolveRunning = res; }
+    );
+
+    let emit: (e: ActionStateEvent) => void = () => {};
+    const deck = {
+      platform: 'darwin',
+      runAction: vi.fn().mockResolvedValue(undefined),
+      stopAction: vi.fn().mockResolvedValue(undefined),
+      getRunning: vi.fn().mockReturnValue(getRunningPromise),
+      onActionState: vi.fn((cb: (e: ActionStateEvent) => void) => { emit = cb; return () => {}; })
+    } as unknown as DeckApi;
+
+    const { result } = renderHook(() => useActionStates(deck, () => {}));
+
+    // Simulate: action started then exited while the snapshot was still in-flight
+    act(() => emit({ type: 'started', buttonId: 'bX', startedAt: 1000 }));
+    act(() => emit({ type: 'exited', buttonId: 'bX', code: 0, ranFor: 50 }));
+
+    // bX is now 'success' (pre-flash); do NOT advance timers yet — we check before the flash
+    expect(result.current.runtimes.get('bX')?.state).toBe('success');
+
+    // Now deliver the late snapshot still listing bX as running
+    await act(async () => {
+      resolveRunning([{ buttonId: 'bX', startedAt: 1000, output: [] }]);
+      // Let the promise microtask queue drain WITHOUT advancing the success-flash timer
+      await Promise.resolve();
+    });
+
+    // bX must NOT be running — late hydration must not override the exited/success state
+    expect(result.current.runtimes.get('bX')?.state).not.toBe('running');
+  });
 });

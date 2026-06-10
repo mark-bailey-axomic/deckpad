@@ -105,4 +105,46 @@ describe('EditModal', () => {
     fireEvent.mouseDown(container.querySelector('.dp-scrim')!);
     expect(onCancel).toHaveBeenCalledTimes(2);
   });
+
+  // -------------------------------------------------------------------------
+  // Phase 3 review finding — should be RED until fixed
+  // -------------------------------------------------------------------------
+
+  it('type switch from command to file strips command/cwd/showTerminal from saved Button', async () => {
+    const onSave = vi.fn();
+    const pickFile = vi.fn().mockResolvedValue('/tmp/report.pdf');
+    const draft = newDraft();
+    // Pre-fill command-specific fields
+    draft.command = 'echo hello';
+    draft.cwd = '/home/user';
+    draft.showTerminal = true;
+    draft.label = 'MyAction';
+
+    render(
+      <EditModal
+        {...baseProps}
+        pickFile={pickFile}
+        onSave={onSave}
+        open
+        draft={draft}
+      />
+    );
+
+    // Switch type to 'file'
+    fireEvent.click(screen.getByText('Open file'));
+
+    // Pick a file so the save button becomes active and path is set
+    fireEvent.click(screen.getByText(/Choose a file/));
+    await waitFor(() => expect(screen.getByText('/tmp/report.pdf')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save action' }));
+
+    expect(onSave).toHaveBeenCalledOnce();
+    const saved = onSave.mock.calls[0][0] as Record<string, unknown>;
+
+    // command-specific keys must be absent when type is 'file'
+    expect(saved).not.toHaveProperty('command');
+    expect(saved).not.toHaveProperty('cwd');
+    expect(saved).not.toHaveProperty('showTerminal');
+  });
 });

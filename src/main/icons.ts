@@ -12,11 +12,24 @@ export type GetFileIconFn = (path: string, opts?: { size?: 'small' | 'normal' | 
 /** Shape of nativeImage.createThumbnailFromPath — injected for tests (darwin only). */
 export type CreateThumbnailFn = (path: string) => Promise<IconImage>;
 
+/**
+ * Seam for extracting a real app icon from a .app bundle's embedded .icns file.
+ * Implementations use: plutil → CFBundleIconFile → sips → 256px PNG written to destPngPath.
+ * Returns true if the PNG was written successfully; false or throws to signal fallback.
+ */
+export type ExtractBundleIconFn = (appBundlePath: string, destPngPath: string) => Promise<boolean>;
+
 export interface IconExtractDeps {
   getFileIcon: GetFileIconFn;
   iconsDir: string;
   /** Optional thumbnail creator used on darwin to avoid getFileIcon size:'large' SIGTRAP. */
   createThumbnail?: CreateThumbnailFn;
+  /**
+   * Optional seam for extracting a real icon from a .app bundle (darwin only).
+   * When provided, tried first for paths ending in .app (case-insensitive).
+   * On true → use the PNG it wrote; on false/throw → fall through to createThumbnail chain.
+   */
+  extractBundleIcon?: ExtractBundleIconFn;
   /** Defaults to process.platform when omitted. */
   platform?: NodeJS.Platform | string;
 }
@@ -29,6 +42,21 @@ export async function extractIcon(deps: IconExtractDeps, filePath: string, butto
 
     if (platform === 'darwin' && deps.createThumbnail) {
       // On darwin, prefer createThumbnailFromPath — size:'large' SIGTRAPs Electron 35 on macOS 26; do not reintroduce.
+
+      // For .app bundles, try extractBundleIcon first (plutil + sips).
+      // Both createThumbnail and getFileIcon return generic icons for .app on macOS 26.
+      const isAppBundle = /\.app\/?$/i.test(filePath);
+      if (isAppBundle && deps.extractBundleIcon) {
+        const destPngPath = join(deps.iconsDir, `${buttonId}.png`);
+        try {
+          const ok = await deps.extractBundleIcon(filePath, destPngPath);
+          if (ok) return `deckicon://${buttonId}.png`;
+          // false → fall through to createThumbnail chain below
+        } catch {
+          // extractBundleIcon threw → fall through to createThumbnail chain below
+        }
+      }
+
       try {
         const thumb = await deps.createThumbnail(filePath);
         if (!thumb.isEmpty()) {

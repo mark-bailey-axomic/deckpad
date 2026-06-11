@@ -1,7 +1,11 @@
 import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync, execFile as _execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { extractIcon } from './icons';
+import { promisify } from 'node:util';
+import { extractIcon, type ExtractBundleIconFn } from './icons';
+
+const execFile = promisify(_execFile);
 import { registerDeckIconScheme, registerDeckIconProtocol } from './deckicon-protocol';
 import { syncIconCache } from './icon-sync';
 import type { PickKind } from '@shared/types';
@@ -17,6 +21,38 @@ import { makeRunActionHandler, registerIpc } from './ipc';
 import { Runner } from './runner';
 import { launchUntracked } from './launchers';
 import { handleQuitRequest, handleWindowCloseRequest } from './quit-flow';
+
+// Both createThumbnail and getFileIcon return generic icons for .app on macOS 26;
+// read the bundle's Info.plist → locate the .icns → convert to PNG via sips.
+const darwinExtractBundleIcon: ExtractBundleIconFn = async (appBundlePath, destPngPath) => {
+  try {
+    let iconName: string;
+    try {
+      const { stdout } = await execFile('plutil', [
+        '-extract', 'CFBundleIconFile', 'raw',
+        join(appBundlePath, 'Contents', 'Info.plist')
+      ]);
+      iconName = stdout.trim();
+    } catch {
+      iconName = 'AppIcon';
+    }
+    if (!iconName) iconName = 'AppIcon';
+
+    let icnsPath = join(appBundlePath, 'Contents', 'Resources', iconName);
+    if (!icnsPath.endsWith('.icns')) icnsPath += '.icns';
+    if (!existsSync(icnsPath)) return false;
+
+    await execFile('sips', [
+      '-s', 'format', 'png',
+      icnsPath,
+      '--out', destPngPath,
+      '--resampleHeightWidthMax', '256'
+    ]);
+    return existsSync(destPngPath);
+  } catch {
+    return false;
+  }
+};
 
 const store = new ConfigStore(app.getPath('userData'));
 const iconsDir = join(app.getPath('userData'), 'icons');
@@ -106,6 +142,9 @@ void app.whenReady().then(() => {
         {
           getFileIcon: (p, opts) => app.getFileIcon(p, { size: opts?.size ?? 'normal' }),
           createThumbnail: (p) => nativeImage.createThumbnailFromPath(p, { width: 256, height: 256 }),
+          // Both createThumbnail and getFileIcon return generic icons for .app on macOS 26;
+          // extract real icons directly from the bundle's embedded .icns file.
+          extractBundleIcon: process.platform === 'darwin' ? darwinExtractBundleIcon : undefined,
           iconsDir
         },
         path,

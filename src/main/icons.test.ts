@@ -155,6 +155,107 @@ describe('extractIcon — darwin thumbnail path', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// macOS .app bundle icon seam (extractBundleIcon)
+// ---------------------------------------------------------------------------
+
+describe('extractIcon — darwin .app bundle seam', () => {
+  it('.app uses extractBundleIcon only: writes PNG to destPngPath, returns URL, createThumbnail+getFileIcon never called', async () => {
+    const getFileIcon = vi.fn<GetFileIconFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => Buffer.alloc(4) });
+    const createThumbnail = vi.fn<CreateThumbnailFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => Buffer.alloc(4) });
+    const fakePng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xde, 0xad]);
+    const extractBundleIcon = vi.fn(async (_path: string, destPngPath: string): Promise<boolean> => {
+      mkdirSync(join(destPngPath, '..'), { recursive: true });
+      writeFileSync(destPngPath, fakePng);
+      return true;
+    });
+
+    const url = await extractIcon(
+      { getFileIcon, createThumbnail, iconsDir: dir, platform: 'darwin', extractBundleIcon },
+      '/Applications/Foo.app',
+      'bundle-1'
+    );
+
+    expect(url).toBe('deckicon://bundle-1.png');
+    expect(readFileSync(join(dir, 'bundle-1.png'))).toEqual(fakePng);
+    expect(extractBundleIcon).toHaveBeenCalledWith('/Applications/Foo.app', join(dir, 'bundle-1.png'));
+    expect(createThumbnail).not.toHaveBeenCalled();
+    expect(getFileIcon).not.toHaveBeenCalled();
+  });
+
+  it('.app seam returns false → falls back to createThumbnail chain', async () => {
+    const getFileIcon = vi.fn<GetFileIconFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => png });
+    const createThumbnail = vi.fn<CreateThumbnailFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => png });
+    const extractBundleIcon = vi.fn(async (): Promise<boolean> => false);
+
+    const url = await extractIcon(
+      { getFileIcon, createThumbnail, iconsDir: dir, platform: 'darwin', extractBundleIcon },
+      '/Applications/Fallback.app',
+      'bundle-2'
+    );
+
+    expect(url).toBe('deckicon://bundle-2.png');
+    expect(extractBundleIcon).toHaveBeenCalledOnce();
+    expect(createThumbnail).toHaveBeenCalledWith('/Applications/Fallback.app');
+    expect(getFileIcon).not.toHaveBeenCalled();
+  });
+
+  it('.app seam throws → falls back to createThumbnail chain', async () => {
+    const getFileIcon = vi.fn<GetFileIconFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => png });
+    const createThumbnail = vi.fn<CreateThumbnailFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => png });
+    const extractBundleIcon = vi.fn(async (): Promise<boolean> => { throw new Error('sips failed'); });
+
+    const url = await extractIcon(
+      { getFileIcon, createThumbnail, iconsDir: dir, platform: 'darwin', extractBundleIcon },
+      '/Applications/Throws.app',
+      'bundle-3'
+    );
+
+    expect(url).toBe('deckicon://bundle-3.png');
+    expect(extractBundleIcon).toHaveBeenCalledOnce();
+    expect(createThumbnail).toHaveBeenCalledWith('/Applications/Throws.app');
+    expect(getFileIcon).not.toHaveBeenCalled();
+  });
+
+  it('non-.app darwin path never calls extractBundleIcon, uses createThumbnail as normal', async () => {
+    const getFileIcon = vi.fn<GetFileIconFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => png });
+    const createThumbnail = vi.fn<CreateThumbnailFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => png });
+    const extractBundleIcon = vi.fn(async (): Promise<boolean> => true);
+
+    const url = await extractIcon(
+      { getFileIcon, createThumbnail, iconsDir: dir, platform: 'darwin', extractBundleIcon },
+      '/usr/bin/myapp',
+      'bundle-4'
+    );
+
+    expect(url).toBe('deckicon://bundle-4.png');
+    expect(extractBundleIcon).not.toHaveBeenCalled();
+    expect(createThumbnail).toHaveBeenCalledWith('/usr/bin/myapp');
+  });
+
+  it('.APP uppercase extension is treated as .app (case-insensitive match)', async () => {
+    const getFileIcon = vi.fn<GetFileIconFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => Buffer.alloc(4) });
+    const createThumbnail = vi.fn<CreateThumbnailFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => Buffer.alloc(4) });
+    const fakePng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xca, 0xfe]);
+    const extractBundleIcon = vi.fn(async (_path: string, destPngPath: string): Promise<boolean> => {
+      mkdirSync(join(destPngPath, '..'), { recursive: true });
+      writeFileSync(destPngPath, fakePng);
+      return true;
+    });
+
+    const url = await extractIcon(
+      { getFileIcon, createThumbnail, iconsDir: dir, platform: 'darwin', extractBundleIcon },
+      '/Applications/MyApp.APP',
+      'bundle-5'
+    );
+
+    expect(url).toBe('deckicon://bundle-5.png');
+    expect(extractBundleIcon).toHaveBeenCalledWith('/Applications/MyApp.APP', join(dir, 'bundle-5.png'));
+    expect(createThumbnail).not.toHaveBeenCalled();
+    expect(getFileIcon).not.toHaveBeenCalled();
+  });
+});
+
 describe('extractIcon — win32/linux path unchanged', () => {
   it('on win32 calls getFileIcon with size "large" and never calls createThumbnail', async () => {
     const getFileIcon = vi.fn<GetFileIconFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => png });

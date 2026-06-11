@@ -84,6 +84,9 @@ describe('App shell', () => {
     expect(document.querySelector('.dp-tab-dot')).toBeInTheDocument();
     fireEvent.click(screen.getByText('1 running'));
     expect(document.querySelector('.dp-panel.is-open')).toBeInTheDocument();
+    // Drain the mock's pending exit timer (fires at 200+1800=2000ms) so it doesn't
+    // leak a running entry into the singleton mock for subsequent tests.
+    await vi.advanceTimersByTimeAsync(2000);
     vi.useRealTimers();
   });
 
@@ -213,5 +216,168 @@ describe('App — deleting a running button stops it and clears the pill', () =>
 
     // Running pill should disappear
     await vi.waitFor(() => expect(screen.queryByText('1 running')).toBeNull());
+  });
+});
+
+describe('drag reorder + grid resize', () => {
+  it('drag in edit mode performs insert/shift reorder and persists', async () => {
+    await seedConfig([button('b1', 'One'), button('b2', 'Two'), button('b3', 'Three')]);
+    render(<App />);
+    await screen.findByText('One');
+    fireEvent.click(screen.getByTitle('Edit layout'));
+    const keys = document.querySelectorAll('.dp-key');
+    fireEvent.dragStart(keys[0]);
+    fireEvent.dragOver(keys[2]);
+    fireEvent.drop(keys[2]);
+    await waitFor(async () => {
+      const cfg = await getDeck().getConfig();
+      expect(cfg.groups[0].slots.slice(0, 3).map((s) => s?.label)).toEqual(['Two', 'Three', 'One']);
+    });
+  });
+
+  it('grid shrink that loses buttons asks for confirmation naming the count', async () => {
+    const labels = Array.from({ length: 8 }, (_, i) => button(`b${i}`, `B${i}`));
+    await seedConfig(labels);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<App />);
+    await screen.findByText('B0');
+    fireEvent.click(screen.getByTitle('Grid size'));
+    // shrink rows 3 → 2 (capacity 12 → 8 keeps all) then cols 4 → 3 (capacity 6 < 8 filled)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Decrease' })[1]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Decrease' })[0]);
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('2 button'));
+    // cancelled → grid unchanged
+    const cfg = await getDeck().getConfig();
+    expect(cfg.grid).toEqual({ cols: 4, rows: 2 });
+    confirmSpy.mockRestore();
+  });
+
+  it('confirmed shrink compacts and persists the new grid', async () => {
+    await seedConfig([button('b1', 'One')]);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<App />);
+    await screen.findByText('One');
+    fireEvent.click(screen.getByTitle('Grid size'));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Decrease' })[0]); // cols 4 → 3
+    await waitFor(async () => {
+      const cfg = await getDeck().getConfig();
+      expect(cfg.grid.cols).toBe(3);
+      expect(cfg.groups[0].slots).toHaveLength(9);
+    });
+  });
+});
+
+describe('duplicate + groups', () => {
+  beforeEach(async () => {
+    await seedConfig([button('b1', 'One')]);
+  });
+
+  it('duplicate places a copy with a NEW id in the first empty slot', async () => {
+    await seedConfig([button('b1', 'One'), null, button('b3', 'Three')]);
+    render(<App />);
+    const key = (await screen.findByText('One')).closest('.dp-key')!;
+    fireEvent.contextMenu(key);
+    fireEvent.click(screen.getByText('Duplicate'));
+    await waitFor(async () => {
+      const cfg = await getDeck().getConfig();
+      const copy = cfg.groups[0].slots[1];
+      expect(copy?.label).toBe('One');
+      expect(copy?.id).not.toBe('b1');
+    });
+  });
+
+  it('duplicate on a full grid shows the info toast instead', async () => {
+    await seedConfig(Array.from({ length: 12 }, (_, i) => button(`b${i}`, `B${i}`)));
+    render(<App />);
+    const key = (await screen.findByText('B0')).closest('.dp-key')!;
+    fireEvent.contextMenu(key);
+    fireEvent.click(screen.getByText('Duplicate'));
+    expect(await screen.findByText(/no empty slot/i)).toBeInTheDocument();
+  });
+
+  it('double-click renames a group; empty name becomes Untitled', async () => {
+    render(<App />);
+    const tab = await screen.findByText('Actions');
+    fireEvent.doubleClick(tab);
+    const input = document.querySelector('.dp-tab-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '   ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(await screen.findByText('Untitled')).toBeInTheDocument();
+  });
+
+  it('cannot delete the last group (no delete badge rendered)', async () => {
+    render(<App />);
+    await screen.findByText('Actions');
+    fireEvent.click(screen.getByTitle('Edit layout'));
+    expect(document.querySelector('.dp-tab-del')).toBeNull();
+  });
+
+  it('deleting a group containing keys asks for confirmation', async () => {
+    await seedConfig([button('b1', 'One')]);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<App />);
+    await screen.findByText('One');
+    fireEvent.click(screen.getByTitle('New group'));
+    fireEvent.click(screen.getByTitle('Edit layout'));
+    // delete the FIRST tab (has 1 key) — expect confirm mentioning it
+    fireEvent.click(document.querySelectorAll('.dp-tab-del')[0]);
+    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(async () => {
+      const cfg = await getDeck().getConfig();
+      expect(cfg.groups).toHaveLength(1);
+    });
+    confirmSpy.mockRestore();
+  });
+
+  it('deleting an empty group needs no confirmation', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    render(<App />);
+    await screen.findByText('Actions');
+    fireEvent.click(screen.getByTitle('New group'));
+    fireEvent.click(screen.getByTitle('Edit layout'));
+    fireEvent.click(document.querySelectorAll('.dp-tab-del')[1]); // new empty group
+    expect(confirmSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+});
+
+describe('settings wiring', () => {
+  beforeEach(async () => {
+    await seedConfig([]);
+  });
+
+  it('accent + surface changes restyle the window immediately and persist', async () => {
+    render(<App />);
+    await screen.findByText('Actions');
+    fireEvent.click(screen.getByTitle('Settings'));
+    fireEvent.click(screen.getByRole('button', { name: '#8B5CF6' }));
+    fireEvent.click(screen.getByText('Ink blue'));
+    const win = document.querySelector('.dp-window') as HTMLElement;
+    expect(win.style.getPropertyValue('--accent')).toBe('#8B5CF6');
+    expect(win.style.background).toBeTruthy(); // ink-blue bg applied
+    const cfg = await getDeck().getConfig();
+    expect(cfg.settings).toMatchObject({ accent: '#8B5CF6', surface: 'ink-blue' });
+  });
+
+  it('Show labels toggle hides key labels', async () => {
+    await seedConfig([button('b1', 'One')]);
+    render(<App />);
+    await screen.findByText('One');
+    fireEvent.click(screen.getByTitle('Settings'));
+    fireEvent.click(screen.getByText('Show labels'));
+    expect(screen.queryByText('One')).toBeNull();
+  });
+
+  it('Launch at startup and Always on top call the deck API', async () => {
+    const deck = getDeck();
+    const loginSpy = vi.spyOn(deck, 'setLoginItem');
+    const topSpy = vi.spyOn(deck, 'setAlwaysOnTop');
+    render(<App />);
+    await screen.findByText('Actions');
+    fireEvent.click(screen.getByTitle('Settings'));
+    fireEvent.click(screen.getByText('Launch at startup'));
+    expect(loginSpy).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByText('Always on top'));
+    expect(topSpy).toHaveBeenCalledWith(true);
   });
 });

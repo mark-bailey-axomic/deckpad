@@ -15,6 +15,15 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
+  "build": {
+    "appId": "dev.deckpad.app",
+    "productName": "DeckPad",
+    "files": ["out/**"],
+    "directories": { "output": "dist" },
+    "mac": { "category": "public.app-category.developer-tools" },
+    "linux": { "target": "AppImage" },
+    "win": { "target": "nsis" }
+  },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.3.0",

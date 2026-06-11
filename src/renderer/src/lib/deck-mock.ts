@@ -18,7 +18,7 @@ function mockDefaultConfig(): Config {
 }
 
 /** Dev/test stand-in for the preload bridge. Pretend runs: start at 200 ms, one output line, exit 0 at 2 s. */
-export function createMockDeck(): DeckApi {
+export function createMockDeck(): DeckApi & { __reset(): void } {
   let config = mockDefaultConfig();
   const listeners = new Set<(e: ActionStateEvent) => void>();
   const running = new Map<string, { startedAt: number; exitTimer: ReturnType<typeof setTimeout> }>();
@@ -66,6 +66,11 @@ export function createMockDeck(): DeckApi {
     onActionState: (cb) => {
       listeners.add(cb);
       return () => listeners.delete(cb);
+    },
+    /** Test helper: cancel all pending timers and clear the running map. */
+    __reset() {
+      for (const { exitTimer } of running.values()) clearTimeout(exitTimer);
+      running.clear();
     }
   };
 }

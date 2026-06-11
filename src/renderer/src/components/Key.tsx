@@ -20,7 +20,8 @@ export interface KeyProps {
   onDelete: () => void;
   onDragStart: () => void;
   onDragOver: (e: DragEvent) => void;
-  onDrop: () => void;
+  onDragEnd?: () => void;
+  onDrop: (e: DragEvent) => void;
 }
 
 const TYPE_GLYPH: Record<Button['type'], DeckIconName> = { command: 'terminal', file: 'file', app: 'app' };
@@ -49,13 +50,13 @@ function KeyGlyph({ button, accent }: { button: Button; accent: string }): React
 
 export function Key(props: KeyProps): ReactElement {
   const { button, runtime, now, accent, editMode, showLabels, pressed, dragOver,
-    onPress, onStop, onContext, onDelete, onDragStart, onDragOver, onDrop } = props;
+    onPress, onStop, onContext, onDelete, onDragStart, onDragOver, onDragEnd, onDrop } = props;
 
   // empty slot
   if (!button) {
     return (
       <button className="dp-key dp-key--empty" onClick={onPress} onContextMenu={(e) => e.preventDefault()}
-        onDragOver={onDragOver} onDrop={onDrop}>
+        onDragOver={onDragOver} onDragEnd={onDragEnd} onDrop={onDrop}>
         <span className="dp-empty-plus"><DeckIcon name="plus" size={22} /></span>
       </button>
     );
@@ -76,6 +77,7 @@ export function Key(props: KeyProps): ReactElement {
       onContextMenu={onContext}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
       onDrop={onDrop}
     >
       <span className="dp-key-inner">

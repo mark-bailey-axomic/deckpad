@@ -37,6 +37,7 @@ export function App(): ReactElement | null {
   const [dragOver, setDragOver] = useState<number | null>(null);
 
   useEffect(() => { void deck.getConfig().then(setConfig); }, []);
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
   // Stable read of the latest config for callbacks (avoids stale closures).
   const configRef = useRef<Config | null>(null);
@@ -106,12 +107,18 @@ export function App(): ReactElement | null {
       groups: cfg.groups.map((g, i) => (i === Math.min(active, cfg.groups.length - 1) ? { ...g, slots: fn(g.slots) } : g))
     }));
 
-  const onDrop = (idx: number) => {
+  const onDrop = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
     const from = dragFrom.current;
     dragFrom.current = null;
     setDragOver(null);
     if (from === null || from === idx) return;
     setSlots((slots) => insertShiftReorder(slots, from, idx)); // persists via commit
+  };
+
+  const onDragEnd = () => {
+    dragFrom.current = null;
+    setDragOver(null);
   };
 
   /** Grid change with compact-on-shrink + confirm naming the losses.
@@ -324,8 +331,9 @@ export function App(): ReactElement | null {
             onContext={(e) => { e.preventDefault(); e.stopPropagation(); if (s) setMenu({ x: e.clientX, y: e.clientY, index: idx }); }}
             onDelete={() => { if (s) stopIfActive(s.id); setSlots((slots) => slots.map((k, j) => (j === idx ? null : k))); }}
             onDragStart={() => { dragFrom.current = idx; }}
-            onDragOver={(e) => { if (editMode) { e.preventDefault(); setDragOver(idx); } }}
-            onDrop={() => onDrop(idx)} />
+            onDragOver={(e) => { if (editMode && dragFrom.current !== null) { e.preventDefault(); setDragOver(idx); } }}
+            onDragEnd={onDragEnd}
+            onDrop={(e) => onDrop(e, idx)} />
         ))}
       </div>
 

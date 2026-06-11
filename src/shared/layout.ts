@@ -9,6 +9,8 @@ export function fitSlots<T>(slots: (T | null)[], capacity: number): (T | null)[]
 
 /** Insert/shift reorder per spec: dropping at j splices the array (nulls shift too). */
 export function insertShiftReorder<T>(slots: (T | null)[], from: number, to: number): (T | null)[] {
+  const last = slots.length - 1;
+  if (from < 0 || from > last || to < 0 || to > last) return [...slots];
   const next = [...slots];
   if (from === to) return next;
   const [moved] = next.splice(from, 1);

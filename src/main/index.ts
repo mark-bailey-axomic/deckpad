@@ -106,8 +106,7 @@ void app.whenReady().then(() => {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-  const startupCfg = store.load();
-  mainWindow.setAlwaysOnTop(startupCfg.settings.alwaysOnTop);
-  app.setLoginItemSettings({ openAtLogin: startupCfg.settings.launchStartup });
+  mainWindow.setAlwaysOnTop(lastConfig.settings.alwaysOnTop);
+  app.setLoginItemSettings({ openAtLogin: lastConfig.settings.launchStartup });
 });
 app.on('window-all-closed', () => app.quit());

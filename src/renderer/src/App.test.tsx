@@ -17,12 +17,18 @@ const button = (id: string, label: string): Button => ({
 
 /** Fully resets the mock config (grid + single 'Actions' group) so tests stay isolated. */
 async function seedConfig(slots: (Button | null)[] = []) {
-  const deck = getDeck();
+  const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
   const cfg = await deck.getConfig();
   cfg.grid = { cols: 4, rows: 3 };
-  cfg.groups = [{ id: 'g1', name: 'Actions', slots: [...slots, ...Array(12 - slots.length).fill(null)] }];
+  const capacity = cfg.grid.cols * cfg.grid.rows;
+  cfg.groups = [{ id: 'g1', name: 'Actions', slots: [...slots, ...Array(Math.max(0, capacity - slots.length)).fill(null)] }];
   await deck.saveConfig(cfg);
 }
+
+beforeEach(() => {
+  const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+  deck.__reset();
+});
 
 describe('App shell', () => {
   beforeEach(async () => {
@@ -264,6 +270,69 @@ describe('drag reorder + grid resize', () => {
       expect(cfg.grid.cols).toBe(3);
       expect(cfg.groups[0].slots).toHaveLength(9);
     });
+  });
+
+  it('cancelled drag (dragStart then dragEnd without drop) resets state and does not reorder', async () => {
+    await seedConfig([button('b1', 'A'), button('b2', 'B'), button('b3', 'C')]);
+    const deck = getDeck();
+    const saveConfigSpy = vi.spyOn(deck, 'saveConfig');
+    render(<App />);
+    await screen.findByText('A');
+
+    // enable edit mode so dragging is active
+    fireEvent.click(screen.getByTitle('Edit layout'));
+
+    const keys = document.querySelectorAll('.dp-key');
+    // drag starts on key A (index 0)
+    fireEvent.dragStart(keys[0]);
+
+    // dragEnd fires (e.g. user releases outside any drop target) without a drop
+    fireEvent.dragEnd(keys[0]);
+
+    // now drop on key B (index 1) — should be inert since dragFrom was cleared
+    fireEvent.drop(keys[1]);
+
+    // config must be unchanged: A, B, C still in order
+    const cfg = await getDeck().getConfig();
+    expect(cfg.groups[0].slots.slice(0, 3).map((s) => s?.label)).toEqual(['A', 'B', 'C']);
+
+    // saveConfig must not have been called for a reorder (only the initial seedConfig save is prior)
+    saveConfigSpy.mockClear(); // clear any prior calls
+    fireEvent.drop(keys[1]); // fire again — still inert
+    expect(saveConfigSpy).not.toHaveBeenCalled();
+
+    // no .is-dragover class should remain anywhere
+    expect(document.querySelector('.is-dragover')).toBeNull();
+
+    saveConfigSpy.mockRestore();
+  });
+
+  it('external (OS file) drag is inert: dragOver + drop without prior dragStart does not reorder or crash', async () => {
+    await seedConfig([button('b1', 'A'), button('b2', 'B')]);
+    const deck = getDeck();
+    const saveConfigSpy = vi.spyOn(deck, 'saveConfig');
+    render(<App />);
+    await screen.findByText('A');
+
+    // enable edit mode
+    fireEvent.click(screen.getByTitle('Edit layout'));
+
+    const keys = document.querySelectorAll('.dp-key');
+    // No dragStart on any key — simulate an OS file being dragged over
+    fireEvent.dragOver(keys[1]);
+    fireEvent.drop(keys[1]);
+
+    // config must be unchanged
+    const cfg = await getDeck().getConfig();
+    expect(cfg.groups[0].slots.slice(0, 2).map((s) => s?.label)).toEqual(['A', 'B']);
+
+    // no reorder save
+    expect(saveConfigSpy).not.toHaveBeenCalled();
+
+    // no .is-dragover stuck on any element
+    expect(document.querySelector('.is-dragover')).toBeNull();
+
+    saveConfigSpy.mockRestore();
   });
 });
 

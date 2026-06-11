@@ -59,3 +59,37 @@ describe('resizeGroups', () => {
     expect(lost).toBe(2); // c and f
   });
 });
+
+describe('insertShiftReorder — bounds', () => {
+  it('out-of-range from index returns array unchanged (same length, same contents)', () => {
+    const arr = ['a', 'b', 'c'] as (string | null)[];
+    const result = insertShiftReorder(arr, 99, 1);
+    expect(result).toHaveLength(arr.length);
+    expect(result).toEqual(arr);
+    expect(result.some((v) => v === undefined)).toBe(false);
+  });
+
+  it('negative from index returns array unchanged', () => {
+    const arr = ['a', 'b', 'c'] as (string | null)[];
+    const result = insertShiftReorder(arr, -1, 1);
+    expect(result).toHaveLength(arr.length);
+    expect(result).toEqual(arr);
+    expect(result.some((v) => v === undefined)).toBe(false);
+  });
+
+  it('out-of-range to index returns array unchanged', () => {
+    const arr = ['a', 'b', 'c'] as (string | null)[];
+    const result = insertShiftReorder(arr, 0, 99);
+    expect(result).toHaveLength(arr.length);
+    expect(result).toEqual(arr);
+    expect(result.some((v) => v === undefined)).toBe(false);
+  });
+
+  it('negative to index returns array unchanged', () => {
+    const arr = ['a', 'b', 'c'] as (string | null)[];
+    const result = insertShiftReorder(arr, 0, -1);
+    expect(result).toHaveLength(arr.length);
+    expect(result).toEqual(arr);
+    expect(result.some((v) => v === undefined)).toBe(false);
+  });
+});

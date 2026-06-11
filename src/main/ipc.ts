@@ -1,8 +1,25 @@
 import { ipcMain } from 'electron';
 import { IPC } from '@shared/constants';
-import type { Config, PickKind, RunningSnapshot } from '@shared/types';
+import { isUntracked } from '@shared/buttons';
+import type { Button, Config, PickKind, RunningSnapshot } from '@shared/types';
 import type { ConfigStore } from './config-store';
 import { validateConfig } from './validate-config';
+
+export interface RunActionDeps {
+  resolveButton: (id: string) => Button | null;
+  runTracked: (button: Button) => void;
+  launchUntracked: (button: Button) => Promise<void>;
+}
+
+/** Main resolves the command from saved config — the renderer only ever sends an id. */
+export function makeRunActionHandler(deps: RunActionDeps): (id: string) => Promise<void> {
+  return async (id: string) => {
+    const button = deps.resolveButton(id);
+    if (!button) throw new Error(`unknown button: ${id}`);
+    if (isUntracked(button)) await deps.launchUntracked(button);
+    else deps.runTracked(button);
+  };
+}
 
 export interface IpcDeps {
   store: ConfigStore;

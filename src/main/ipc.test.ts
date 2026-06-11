@@ -230,3 +230,57 @@ describe('buttonId format guard', () => {
     expect(deps.stopAction).toHaveBeenCalledWith('btn-ok');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 22: makeRunActionHandler routing (tracked vs untracked)
+// ---------------------------------------------------------------------------
+
+import { makeRunActionHandler } from './ipc';
+import type { Button } from '@shared/types';
+
+describe('makeRunActionHandler routing', () => {
+  const command: Button = { id: 'c1', label: 'C', type: 'command', command: 'true', icon: { kind: 'auto' } };
+  const terminal: Button = { ...command, id: 'c2', showTerminal: true };
+  const file: Button = { id: 'f1', label: 'F', type: 'file', path: '/tmp/x', icon: { kind: 'auto' } };
+
+  function makeDeps() {
+    return {
+      resolveButton: vi.fn((id: string) => ({ c1: command, c2: terminal, f1: file } as Record<string, Button>)[id] ?? null),
+      runTracked: vi.fn(),
+      launchUntracked: vi.fn().mockResolvedValue(undefined)
+    };
+  }
+
+  it('plain commands go to the runner (tracked)', async () => {
+    const d = makeDeps();
+    await makeRunActionHandler(d)('c1');
+    expect(d.runTracked).toHaveBeenCalledWith(command);
+    expect(d.launchUntracked).not.toHaveBeenCalled();
+  });
+
+  it('showTerminal commands and files are untracked', async () => {
+    const d = makeDeps();
+    await makeRunActionHandler(d)('c2');
+    await makeRunActionHandler(d)('f1');
+    expect(d.launchUntracked).toHaveBeenCalledWith(terminal);
+    expect(d.launchUntracked).toHaveBeenCalledWith(file);
+    expect(d.runTracked).not.toHaveBeenCalled();
+  });
+
+  it('unknown ids reject (renderer can never inject commands — only ids resolve)', async () => {
+    const d = makeDeps();
+    await expect(makeRunActionHandler(d)('ghost')).rejects.toThrow(/unknown button/i);
+  });
+
+  // -------------------------------------------------------------------------
+  // Review-mandated: pressing run for a button id not present in config
+  // rejects /unknown button|not found/i without spawning
+  // -------------------------------------------------------------------------
+
+  it('unknown button id rejects with /unknown button|not found/i and never calls runTracked or launchUntracked', async () => {
+    const d = makeDeps();
+    await expect(makeRunActionHandler(d)('does-not-exist')).rejects.toThrow(/unknown button|not found/i);
+    expect(d.runTracked).not.toHaveBeenCalled();
+    expect(d.launchUntracked).not.toHaveBeenCalled();
+  });
+});

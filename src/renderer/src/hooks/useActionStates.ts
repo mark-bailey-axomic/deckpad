@@ -83,7 +83,10 @@ export function useActionStates(deck: DeckApi, onFail: (f: FailInfo) => void) {
         });
       } else {
         clearTimeout(timers.current.get(e.buttonId));
-        if (e.code === 0) {
+        if (e.stopped) {
+          // Deliberate user-initiated stop: go directly to idle, no failure UI
+          update(e.buttonId, (p) => ({ ...p, state: 'idle', startedAt: undefined, failedDot: p.failedDot }));
+        } else if (e.code === 0) {
           update(e.buttonId, (p) => ({ ...p, state: 'success', ranFor: e.ranFor }));
           setTimer(e.buttonId, SUCCESS_FLASH_MS, () =>
             update(e.buttonId, (p) => ({ ...p, state: 'idle', startedAt: undefined }))

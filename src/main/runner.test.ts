@@ -355,3 +355,62 @@ describe('Runner.killAll() — unforced keeps SIGTERM+escalation', () => {
     expect(kill).toHaveBeenCalledWith(-4242, 'SIGKILL');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Spec: deliberate stop must carry stopped:true on the exited event so the
+// renderer can distinguish it from a real failure.
+// ---------------------------------------------------------------------------
+
+describe('Runner — stopped flag on exited event', () => {
+  it('stop(id) causes the exited event to carry stopped:true', () => {
+    runner.run(button());
+    runner.stop('b1');
+    child.emit('exit', 143); // SIGTERM exit code
+    const exited = events.find((e) => e.type === 'exited');
+    expect(exited).toMatchObject({ type: 'exited', buttonId: 'b1', stopped: true });
+  });
+
+  it('stop(id) + SIGKILL escalation: exited event still carries stopped:true', () => {
+    runner.run(button());
+    runner.stop('b1');
+    vi.advanceTimersByTime(3000); // escalates to SIGKILL
+    child.emit('exit', -1); // killed
+    const exited = events.find((e) => e.type === 'exited');
+    expect(exited).toMatchObject({ type: 'exited', buttonId: 'b1', stopped: true });
+  });
+
+  it('killAll() causes each exited event to carry stopped:true', () => {
+    const c2 = new FakeChild();
+    c2.pid = 5151;
+    spawn.mockReturnValueOnce(child).mockReturnValueOnce(c2);
+    runner.run(button());
+    runner.run(button({ id: 'b2' }));
+    runner.killAll();
+    child.emit('exit', 143);
+    c2.emit('exit', 143);
+    const exitedEvents = events.filter((e) => e.type === 'exited');
+    expect(exitedEvents).toHaveLength(2);
+    for (const e of exitedEvents) {
+      expect(e).toMatchObject({ stopped: true });
+    }
+  });
+
+  it('natural nonzero exit does NOT carry stopped flag', () => {
+    runner.run(button());
+    child.emit('exit', 3); // natural failure — no stop() called
+    const exited = events.find((e) => e.type === 'exited');
+    expect(exited).toMatchObject({ type: 'exited', code: 3 });
+    // stopped must be absent (undefined / not present), never truthy
+    expect((exited as { stopped?: boolean })?.stopped).toBeFalsy();
+  });
+
+  it('natural zero exit does NOT carry stopped flag', () => {
+    runner.run(button());
+    child.stdout.emit('data', Buffer.from('done\n'));
+    vi.setSystemTime(12_000);
+    child.emit('exit', 0);
+    const exited = events.find((e) => e.type === 'exited');
+    expect(exited).toMatchObject({ type: 'exited', code: 0 });
+    expect((exited as { stopped?: boolean })?.stopped).toBeFalsy();
+  });
+});

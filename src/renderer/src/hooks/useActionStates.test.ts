@@ -236,6 +236,66 @@ describe('useActionStates', () => {
     expect(timersBefore).toBeLessThanOrEqual(1);
   });
 
+  // -------------------------------------------------------------------------
+  // Spec: deliberate stop (exited with stopped:true) must NOT show failure UI
+  // -------------------------------------------------------------------------
+
+  it('stopped exit (stopped:true, code -1) transitions to idle — no failed flash, failedDot false, onFail not called', async () => {
+    const onFail = vi.fn();
+    const { deck, emit } = fakeDeck();
+    const { result } = renderHook(() => useActionStates(deck, onFail));
+    await act(async () => { result.current.press(cmdButton); });
+    act(() => emit({ type: 'started', buttonId: 'b1', startedAt: 1000 }));
+    act(() => vi.advanceTimersByTime(300));
+    expect(result.current.runtimes.get('b1')?.state).toBe('running');
+
+    // Deliberate stop: exited with stopped:true and a kill exit code
+    act(() => emit({ type: 'exited', buttonId: 'b1', code: -1, ranFor: 800, stopped: true } as ActionStateEvent));
+
+    const rt = result.current.runtimes.get('b1')!;
+    // Must go directly to idle — never show the 'failed' state
+    expect(rt.state).toBe('idle');
+    expect(rt.failedDot).toBe(false);
+    expect(onFail).not.toHaveBeenCalled();
+  });
+
+  it('stopped exit (stopped:true, code 143) — no failed flash timer, key is immediately idle', async () => {
+    const onFail = vi.fn();
+    const { deck, emit } = fakeDeck();
+    const { result } = renderHook(() => useActionStates(deck, onFail));
+    await act(async () => { result.current.press(cmdButton); });
+    act(() => emit({ type: 'started', buttonId: 'b1', startedAt: 1000 }));
+    act(() => vi.advanceTimersByTime(300));
+
+    act(() => emit({ type: 'exited', buttonId: 'b1', code: 143, ranFor: 500, stopped: true } as ActionStateEvent));
+
+    expect(result.current.runtimes.get('b1')?.state).toBe('idle');
+    expect(result.current.runtimes.get('b1')?.failedDot).toBe(false);
+    expect(onFail).not.toHaveBeenCalled();
+    // Advance past the failed flash window — state must remain idle (no flash was set)
+    act(() => vi.advanceTimersByTime(650));
+    expect(result.current.runtimes.get('b1')?.state).toBe('idle');
+  });
+
+  it('stopped exit while output log populated — runtime ends as idle with no failed entry semantics', async () => {
+    const onFail = vi.fn();
+    const { deck, emit } = fakeDeck();
+    const { result } = renderHook(() => useActionStates(deck, onFail));
+    await act(async () => { result.current.press(cmdButton); });
+    act(() => emit({ type: 'started', buttonId: 'b1', startedAt: 1000 }));
+    act(() => vi.advanceTimersByTime(300));
+    act(() => emit({ type: 'output', buttonId: 'b1', chunk: 'partial output\n' }));
+
+    act(() => emit({ type: 'exited', buttonId: 'b1', code: -1, ranFor: 1200, stopped: true } as ActionStateEvent));
+
+    const rt = result.current.runtimes.get('b1')!;
+    expect(rt.state).toBe('idle');
+    expect(rt.failedDot).toBe(false);
+    // exit code must not be surfaced as a failure indicator
+    expect(rt.exit).toBeUndefined();
+    expect(onFail).not.toHaveBeenCalled();
+  });
+
   it('late getRunning snapshot does not resurrect an already-exited run', async () => {
     // Control the getRunning promise so we can resolve it after the exit event
     let resolveRunning!: (snaps: import('@shared/types').RunningSnapshot[]) => void;

@@ -50,7 +50,7 @@ export interface Config {
 export type ActionStateEvent =
   | { type: 'started'; buttonId: string; startedAt: number }
   | { type: 'output'; buttonId: string; chunk: string }
-  | { type: 'exited'; buttonId: string; code: number; ranFor: number };
+  | { type: 'exited'; buttonId: string; code: number; ranFor: number; stopped?: boolean };
 
 export interface RunningSnapshot {
   buttonId: string;

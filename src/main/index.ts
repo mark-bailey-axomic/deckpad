@@ -16,6 +16,7 @@ import { ConfigStore } from './config-store';
 import { makeRunActionHandler, registerIpc } from './ipc';
 import { Runner } from './runner';
 import { launchUntracked } from './launchers';
+import { handleQuitRequest } from './quit-flow';
 
 const store = new ConfigStore(app.getPath('userData'));
 const iconsDir = join(app.getPath('userData'), 'icons');
@@ -116,4 +117,27 @@ void app.whenReady().then(() => {
   mainWindow.setAlwaysOnTop(lastConfig.settings.alwaysOnTop);
   app.setLoginItemSettings({ openAtLogin: lastConfig.settings.launchStartup });
 });
+let quitting = false;
+app.on('before-quit', (event) => {
+  if (quitting) return;
+  const decision = handleQuitRequest({
+    runningCount: () => runner.runningCount(),
+    confirm: (n) =>
+      dialog.showMessageBoxSync(mainWindow!, {
+        type: 'warning',
+        buttons: ['Quit', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        message: `${n} action${n === 1 ? ' is' : 's are'} still running`,
+        detail: 'Quitting DeckPad will stop them.'
+      }) === 0,
+    killAll: () => runner.killAll()
+  });
+  if (decision === 'cancel') {
+    event.preventDefault();
+    return;
+  }
+  quitting = true;
+});
+
 app.on('window-all-closed', () => app.quit());

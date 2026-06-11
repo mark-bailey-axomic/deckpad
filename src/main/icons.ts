@@ -41,7 +41,7 @@ export async function extractIcon(deps: IconExtractDeps, filePath: string, butto
     let img: IconImage;
 
     if (platform === 'darwin' && deps.createThumbnail) {
-      // On darwin, prefer createThumbnailFromPath — size:'large' SIGTRAPs Electron 35 on macOS 26; do not reintroduce.
+      // On darwin, prefer createThumbnailFromPath — size:'large' SIGTRAPs Electron on macOS 26 (verified on 35.7.5 AND 42.4.0 — not fixed upstream); do not reintroduce.
 
       // For .app bundles, try extractBundleIcon first (plutil + sips).
       // Both createThumbnail and getFileIcon return generic icons for .app on macOS 26.

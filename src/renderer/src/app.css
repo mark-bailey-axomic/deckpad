@@ -9,6 +9,14 @@ html, body, #root { height: 100%; margin: 0; }
 .dp-bar .dp-grid-ctrl,
 .dp-bar .dp-pill { -webkit-app-region: no-drag; }
 
+/* Overlays can sit on top of the bar — they must never act as drag regions. */
+.dp-sheet, .dp-scrim, .dp-menu, .dp-panel { -webkit-app-region: no-drag; }
+
+/* At minimum grid widths the brand name would overflow the bar — hide it. */
+@media (max-width: 300px) {
+  .dp-brand-name { display: none; }
+}
+
 /* macOS hiddenInset: traffic lights overlay the bar — pad the brand clear of them. */
 .dp-bar.is-mac { padding-left: 78px; }
 

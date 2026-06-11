@@ -16,7 +16,7 @@ import { ConfigStore } from './config-store';
 import { makeRunActionHandler, registerIpc } from './ipc';
 import { Runner } from './runner';
 import { launchUntracked } from './launchers';
-import { handleQuitRequest } from './quit-flow';
+import { handleQuitRequest, handleWindowCloseRequest } from './quit-flow';
 
 const store = new ConfigStore(app.getPath('userData'));
 const iconsDir = join(app.getPath('userData'), 'icons');
@@ -111,27 +111,46 @@ void app.whenReady().then(() => {
     setLoginItem: (v) => app.setLoginItemSettings({ openAtLogin: v })
   });
   mainWindow = createWindow(lastConfig.grid);
+  const win = mainWindow;
+  // Intercept window close: the dialog is parented to the window (still alive here).
+  // Cancel keeps the window open — never a window-less app with orphaned processes.
+  win.on('close', (event) => {
+    if (quitting) return;
+    handleWindowCloseRequest({
+      runningCount: () => runner.runningCount(),
+      confirm: (n) => confirmStopRunning(win, n),
+      killAll: (opts) => runner.killAll(opts),
+      preventDefault: () => event.preventDefault(),
+      initiateQuit: () => {
+        quitting = true;
+      }
+    });
+  });
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
   mainWindow.setAlwaysOnTop(lastConfig.settings.alwaysOnTop);
   app.setLoginItemSettings({ openAtLogin: lastConfig.settings.launchStartup });
 });
+const confirmStopRunning = (parent: BrowserWindow | null, n: number): boolean => {
+  const options = {
+    type: 'warning' as const,
+    buttons: ['Quit', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    message: `${n} action${n === 1 ? ' is' : 's are'} still running`,
+    detail: 'Quitting DeckPad will stop them.'
+  };
+  return (parent ? dialog.showMessageBoxSync(parent, options) : dialog.showMessageBoxSync(options)) === 0;
+};
+
 let quitting = false;
 app.on('before-quit', (event) => {
   if (quitting) return;
   const decision = handleQuitRequest({
     runningCount: () => runner.runningCount(),
-    confirm: (n) =>
-      dialog.showMessageBoxSync(mainWindow!, {
-        type: 'warning',
-        buttons: ['Quit', 'Cancel'],
-        defaultId: 1,
-        cancelId: 1,
-        message: `${n} action${n === 1 ? ' is' : 's are'} still running`,
-        detail: 'Quitting DeckPad will stop them.'
-      }) === 0,
-    killAll: () => runner.killAll()
+    confirm: (n) => confirmStopRunning(mainWindow, n),
+    killAll: (opts) => runner.killAll(opts)
   });
   if (decision === 'cancel') {
     event.preventDefault();

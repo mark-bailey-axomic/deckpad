@@ -298,3 +298,60 @@ describe('Runner — late stdout after finish is dropped', () => {
     expect(events.length).toBe(sendCountAfterExit);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 8: forced killAll — SIGKILL immediately, no SIGTERM, no timer
+// ---------------------------------------------------------------------------
+
+describe('Runner.killAll({ force: true })', () => {
+  it('POSIX: sends SIGKILL to each process group immediately — no SIGTERM first', () => {
+    runner.run(button());
+    runner.killAll({ force: true });
+    // Must have sent SIGKILL
+    expect(kill).toHaveBeenCalledWith(-4242, 'SIGKILL');
+    // Must NOT have sent SIGTERM at any point
+    expect(kill).not.toHaveBeenCalledWith(-4242, 'SIGTERM');
+  });
+
+  it('POSIX: does not arm a SIGKILL escalation timer — vi.getTimerCount() does not grow', () => {
+    runner.run(button());
+    const timersBefore = vi.getTimerCount();
+    runner.killAll({ force: true });
+    // No new timers should have been armed
+    expect(vi.getTimerCount()).toBe(timersBefore);
+  });
+
+  it('POSIX: kills every running process group immediately when multiple are running', () => {
+    const c2 = new FakeChild();
+    c2.pid = 5151;
+    spawn.mockReturnValueOnce(child).mockReturnValueOnce(c2);
+    runner.run(button());
+    runner.run(button({ id: 'b2' }));
+    runner.killAll({ force: true });
+    expect(kill).toHaveBeenCalledWith(-4242, 'SIGKILL');
+    expect(kill).toHaveBeenCalledWith(-5151, 'SIGKILL');
+    expect(kill).not.toHaveBeenCalledWith(-4242, 'SIGTERM');
+    expect(kill).not.toHaveBeenCalledWith(-5151, 'SIGTERM');
+  });
+
+  it('win32: still uses taskkill /f /t (force flag has no different win32 effect)', () => {
+    const winChild = new FakeChild();
+    const winSpawn = vi.fn(() => winChild);
+    const winRunner = new Runner({ spawn: winSpawn as never, send: () => {}, platform: 'win32', kill });
+    winRunner.run(button());
+    winRunner.killAll({ force: true });
+    expect(winSpawn).toHaveBeenLastCalledWith('taskkill', ['/pid', '4242', '/t', '/f'], { shell: false });
+  });
+});
+
+describe('Runner.killAll() — unforced keeps SIGTERM+escalation', () => {
+  it('unforced killAll still sends SIGTERM and arms the escalation timer', () => {
+    runner.run(button());
+    runner.killAll();
+    expect(kill).toHaveBeenCalledWith(-4242, 'SIGTERM');
+    expect(kill).not.toHaveBeenCalledWith(-4242, 'SIGKILL');
+    // Timer is armed — advancing 3 s fires SIGKILL
+    vi.advanceTimersByTime(3000);
+    expect(kill).toHaveBeenCalledWith(-4242, 'SIGKILL');
+  });
+});

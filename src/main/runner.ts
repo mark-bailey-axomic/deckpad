@@ -146,13 +146,34 @@ export class Runner {
     }, SIGKILL_ESCALATION_MS);
   }
 
-  killAll(): void {
+  killAll(opts?: { force?: boolean }): void {
+    if (opts?.force) {
+      for (const run of [...this.runs.values()]) this.forceKill(run);
+      return;
+    }
     for (const id of [...this.runs.keys()]) {
       try {
         this.stop(id);
       } catch {
         // keep stopping the remaining runs
       }
+    }
+  }
+
+  /** Immediate kill — no SIGTERM grace, no escalation timer. Used when the app is quitting now. */
+  private forceKill(run: Run): void {
+    const pid = run.child.pid;
+    if (!pid) return;
+    if (this.platform === 'win32') {
+      // taskkill /f is already forced; same path as stop().
+      this.spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { shell: false })
+        .on('error', () => undefined); // taskkill unavailable/denied: nothing actionable
+      return;
+    }
+    try {
+      this.kill(-pid, 'SIGKILL');
+    } catch {
+      // ESRCH et al: group already gone
     }
   }
 }

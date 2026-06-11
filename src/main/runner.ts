@@ -96,6 +96,22 @@ export class Runner {
   }
 
   stop(id: string): void {
-    // tree kill implemented in Task 20
+    const run = this.runs.get(id);
+    const pid = run?.child.pid;
+    if (!run || !pid) return;
+    if (this.platform === 'win32') {
+      // taskkill kills the whole tree forcibly; 'exit' on the child fires finish().
+      this.spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { shell: false });
+      return;
+    }
+    // POSIX: signal the process group (detached spawn made the child a group leader).
+    this.kill(-pid, 'SIGTERM');
+    run.killTimer = setTimeout(() => {
+      if (this.runs.has(id)) this.kill(-pid, 'SIGKILL');
+    }, SIGKILL_ESCALATION_MS);
+  }
+
+  killAll(): void {
+    for (const id of [...this.runs.keys()]) this.stop(id);
   }
 }

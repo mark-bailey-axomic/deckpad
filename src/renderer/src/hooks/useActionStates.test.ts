@@ -147,6 +147,95 @@ describe('useActionStates', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  // -------------------------------------------------------------------------
+  // Phase 4 review — adversarial IPC event-ordering contract tests
+  // -------------------------------------------------------------------------
+
+  it('started event delivered before runAction invoke resolves — key reaches running', async () => {
+    // Simulate IPC reality: the main process can fire 'started' synchronously on the
+    // ipcRenderer event loop BEFORE the invoke() promise resolves in the renderer.
+    let resolveRun!: () => void;
+    let emitStarted!: (e: ActionStateEvent) => void;
+
+    const deck = {
+      platform: 'darwin',
+      runAction: vi.fn().mockImplementation(() => new Promise<void>((res) => { resolveRun = res; })),
+      stopAction: vi.fn().mockResolvedValue(undefined),
+      getRunning: vi.fn().mockResolvedValue([]),
+      onActionState: vi.fn((cb: (e: ActionStateEvent) => void) => { emitStarted = cb; return () => {}; })
+    } as unknown as DeckApi;
+
+    const { result } = renderHook(() => useActionStates(deck, () => {}));
+
+    // Start the press — runAction is now pending (not yet resolved)
+    act(() => { result.current.press(cmdButton); });
+    expect(result.current.runtimes.get('b1')?.state).toBe('launching');
+
+    // Emit 'started' synchronously before the runAction promise resolves
+    act(() => emitStarted({ type: 'started', buttonId: 'b1', startedAt: 2000 }));
+
+    // Still in the 300 ms reveal window
+    expect(result.current.runtimes.get('b1')?.state).toBe('launching');
+
+    // Resolve runAction promise AFTER started — must not clobber state
+    await act(async () => { resolveRun(); });
+
+    // No double-launch: runAction invoked exactly once
+    expect(deck.runAction).toHaveBeenCalledTimes(1);
+
+    // Advance past reveal — must reach running
+    act(() => vi.advanceTimersByTime(300));
+    expect(result.current.runtimes.get('b1')?.state).toBe('running');
+    expect(result.current.runtimes.get('b1')?.startedAt).toBe(2000);
+  });
+
+  it('exited without started (spawn error path) — failed state + failedDot + exit recorded', async () => {
+    const onFail = vi.fn();
+    const { deck, emit } = fakeDeck();
+    const { result } = renderHook(() => useActionStates(deck, onFail));
+
+    // Press to get into launching state
+    await act(async () => { result.current.press(cmdButton); });
+    expect(result.current.runtimes.get('b1')?.state).toBe('launching');
+
+    // Deliver only exited (no started) — simulates spawn error path
+    act(() => emit({ type: 'exited', buttonId: 'b1', code: -1, ranFor: 0 }));
+
+    const rt = result.current.runtimes.get('b1')!;
+    expect(rt.state).toBe('failed');
+    expect(rt.failedDot).toBe(true);
+    expect(rt.exit).toBe(-1);
+    expect(onFail).toHaveBeenCalledWith({ buttonId: 'b1', exit: -1 });
+  });
+
+  it('rapid double-press within pre-start window — second press is a no-op (launching guard)', async () => {
+    const { deck } = fakeDeck();
+    const { result } = renderHook(() => useActionStates(deck, () => {}));
+
+    // First press
+    await act(async () => { result.current.press(cmdButton); });
+    expect(result.current.runtimes.get('b1')?.state).toBe('launching');
+    expect(deck.runAction).toHaveBeenCalledTimes(1);
+
+    // Second press before any 'started' event — must be a no-op per hook contract
+    await act(async () => { result.current.press(cmdButton); });
+
+    // runAction must NOT have been called a second time
+    expect(deck.runAction).toHaveBeenCalledTimes(1);
+
+    // State must still be launching (not reset / doubled)
+    expect(result.current.runtimes.get('b1')?.state).toBe('launching');
+
+    // No extra timers from the second press
+    const timersBefore = vi.getTimerCount();
+    // Allow at most one timer (the untracked flash for file-type wouldn't apply here,
+    // but tracked commands don't set a timer on press — only on 'started').
+    // The hook sets a timer only when started arrives, so for a tracked command
+    // that hasn't received 'started' yet, timer count should be 0 or 1 (untracked case).
+    // For cmdButton (tracked), we expect 0 timers pending at this point.
+    expect(timersBefore).toBeLessThanOrEqual(1);
+  });
+
   it('late getRunning snapshot does not resurrect an already-exited run', async () => {
     // Control the getRunning promise so we can resolve it after the exit event
     let resolveRunning!: (snaps: import('@shared/types').RunningSnapshot[]) => void;

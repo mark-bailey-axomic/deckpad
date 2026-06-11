@@ -31,8 +31,15 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'deckpad-ipc-'));
   deps = {
     store: new ConfigStore(dir),
-    onConfigSaved: vi.fn()
-  } as unknown as IpcDeps;
+    onConfigSaved: vi.fn(),
+    runAction: vi.fn().mockResolvedValue(undefined),
+    stopAction: vi.fn(),
+    getRunning: vi.fn(() => [{ buttonId: 'b1', startedAt: 1, output: [] }]),
+    pickFile: vi.fn().mockResolvedValue('/picked'),
+    extractIcon: vi.fn().mockResolvedValue('deckicon://b1.png'),
+    setAlwaysOnTop: vi.fn(),
+    setLoginItem: vi.fn()
+  };
   registerIpc(deps);
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -99,8 +106,15 @@ describe('config IPC', () => {
     handlers.clear();
     const throwingDeps: IpcDeps = {
       store: new ConfigStore(dir),
-      onConfigSaved: vi.fn().mockImplementation(() => { throw new Error('hook exploded'); })
-    } as unknown as IpcDeps;
+      onConfigSaved: vi.fn().mockImplementation(() => { throw new Error('hook exploded'); }),
+      runAction: vi.fn().mockResolvedValue(undefined),
+      stopAction: vi.fn(),
+      getRunning: vi.fn(() => []),
+      pickFile: vi.fn().mockResolvedValue(null),
+      extractIcon: vi.fn().mockResolvedValue(null),
+      setAlwaysOnTop: vi.fn(),
+      setLoginItem: vi.fn()
+    };
     registerIpc(throwingDeps);
 
     const cfg = defaultConfig();
@@ -116,5 +130,45 @@ describe('config IPC', () => {
     // Store must reflect the save
     const reloaded = await invoke<Config>(IPC.getConfig);
     expect(reloaded.settings.accent).toBe('#F59E0B');
+  });
+});
+
+describe('action + system IPC', () => {
+  it('action:run delegates the id to runAction', async () => {
+    await invoke(IPC.runAction, 'b1');
+    expect(deps.runAction).toHaveBeenCalledWith('b1');
+  });
+
+  it('action:run rejects non-string ids', async () => {
+    await expect(invoke(IPC.runAction, 42)).rejects.toThrow(/invalid/i);
+  });
+
+  it('action:stop delegates; action:running returns the snapshot', async () => {
+    await invoke(IPC.stopAction, 'b1');
+    expect(deps.stopAction).toHaveBeenCalledWith('b1');
+    expect(await invoke(IPC.getRunning)).toEqual([{ buttonId: 'b1', startedAt: 1, output: [] }]);
+  });
+
+  it('dialog:pick-file validates kind and delegates', async () => {
+    expect(await invoke(IPC.pickFile, 'image')).toBe('/picked');
+    await expect(invoke(IPC.pickFile, 'evil')).rejects.toThrow(/invalid/i);
+  });
+
+  it('icon:extract validates and delegates', async () => {
+    expect(await invoke(IPC.extractIcon, '/a', 'b1')).toBe('deckicon://b1.png');
+    await expect(invoke(IPC.extractIcon, 1, 2)).rejects.toThrow(/invalid/i);
+  });
+
+  it('window/system toggles validate booleans and delegate', async () => {
+    await invoke(IPC.setAlwaysOnTop, true);
+    expect(deps.setAlwaysOnTop).toHaveBeenCalledWith(true);
+    await invoke(IPC.setLoginItem, false);
+    expect(deps.setLoginItem).toHaveBeenCalledWith(false);
+    await expect(invoke(IPC.setAlwaysOnTop, 'yes')).rejects.toThrow(/invalid/i);
+  });
+
+  it('config:save now rejects structurally invalid configs via validateConfig', async () => {
+    const bad = { ...defaultConfig(), grid: { cols: 99, rows: 1 } };
+    await expect(invoke(IPC.saveConfig, bad)).rejects.toThrow(/invalid config/i);
   });
 });

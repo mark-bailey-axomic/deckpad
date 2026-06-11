@@ -2,6 +2,9 @@ import { app, BrowserWindow, shell } from 'electron';
 import { spawn, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { extractIcon } from './icons';
+import { registerDeckIconScheme, registerDeckIconProtocol } from './deckicon-protocol';
+
+registerDeckIconScheme();
 import { IPC } from '@shared/constants';
 import { findButton } from '@shared/buttons';
 import type { ActionStateEvent } from '@shared/types';
@@ -61,6 +64,7 @@ function createWindow(): BrowserWindow {
 }
 
 void app.whenReady().then(() => {
+  registerDeckIconProtocol(iconsDir);
   registerIpc({
     store,
     onConfigSaved: () => undefined, // icon sync (Task 25) + resize (Task 30)

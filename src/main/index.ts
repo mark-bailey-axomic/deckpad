@@ -99,12 +99,15 @@ void app.whenReady().then(() => {
         path,
         buttonId
       ),
-    setAlwaysOnTop: () => undefined, // Task 29
-    setLoginItem: () => undefined // Task 29
+    setAlwaysOnTop: (v) => mainWindow?.setAlwaysOnTop(v),
+    setLoginItem: (v) => app.setLoginItemSettings({ openAtLogin: v })
   });
   mainWindow = createWindow();
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+  const startupCfg = store.load();
+  mainWindow.setAlwaysOnTop(startupCfg.settings.alwaysOnTop);
+  app.setLoginItemSettings({ openAtLogin: startupCfg.settings.launchStartup });
 });
 app.on('window-all-closed', () => app.quit());

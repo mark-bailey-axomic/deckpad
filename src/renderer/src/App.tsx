@@ -200,17 +200,15 @@ export function App(): ReactElement | null {
     setMenu(null);
   };
 
-  // ---- settings (side-effect wiring lands in Task 29) ----
+  // ---- settings ----
   const onSettingsChange = (patch: Partial<SettingsValues>) => {
-    const { cols: pCols, rows: pRows, ...rest } = patch;
-    commit((cfg) => ({
-      ...cfg,
-      grid: {
-        cols: pCols ?? cfg.grid.cols,
-        rows: pRows ?? cfg.grid.rows
-      },
-      settings: { ...cfg.settings, ...rest }
-    }));
+    if ('cols' in patch || 'rows' in patch) {
+      changeGrid(patch.cols ?? cols, patch.rows ?? rows);
+      return;
+    }
+    if (patch.launchStartup !== undefined) void deck.setLoginItem(patch.launchStartup);
+    if (patch.alwaysOnTop !== undefined) void deck.setAlwaysOnTop(patch.alwaysOnTop);
+    commit((cfg) => ({ ...cfg, settings: { ...cfg.settings, ...patch } }));
   };
 
   // Activity panel items: running first, then failed-dot entries (persist until next run)

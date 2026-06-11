@@ -150,10 +150,14 @@ export function App(): ReactElement | null {
     setActive(nextIndex);
   };
 
-  // Group-delete confirm flow lands in Task 28; instant delete until then.
   const deleteGroup = (gi: number) => {
-    if (config.groups.length <= 1) return;
-    config.groups[gi].slots.forEach((s) => { if (s) stopIfActive(s.id); });
+    if (config.groups.length <= 1) return; // min 1 group
+    const target = config.groups[gi];
+    const keyCount = target.slots.filter(Boolean).length;
+    if (keyCount > 0 && !window.confirm(`Delete group "${target.name}" and its ${keyCount} key${keyCount === 1 ? '' : 's'}?`)) {
+      return;
+    }
+    target.slots.forEach((s) => { if (s) stopIfActive(s.id); });
     commit((cfg) => ({ ...cfg, groups: cfg.groups.filter((_, i) => i !== gi) }));
     setActive((a) => Math.max(0, gi <= a ? a - 1 : a));
   };
@@ -172,8 +176,21 @@ export function App(): ReactElement | null {
     setMenu(null);
     if (b) setModal({ draft: { ...structuredClone(b), isNew: false }, index: menu.index });
   };
-  // Duplicate stub: real first-empty-slot logic lands in Task 28.
-  const ctxDuplicate = () => setMenu(null);
+  const ctxDuplicate = () => {
+    if (!menu) return;
+    const src = group.slots[menu.index];
+    setMenu(null);
+    if (!src) return;
+    const empty = group.slots.findIndex((s) => s === null);
+    if (empty < 0) {
+      showToast({ kind: 'info', message: 'No empty slot in this group — duplicate needs space' });
+      return;
+    }
+    const copy: Button = structuredClone(src);
+    copy.id = crypto.randomUUID();
+    setSlots((slots) => slots.map((s, i) => (i === empty ? copy : s)));
+    // icon cache for the copy is reconciled by main's syncIconCache on save
+  };
   const ctxDelete = () => {
     if (!menu) return;
     const idx = menu.index;

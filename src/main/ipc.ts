@@ -18,9 +18,13 @@ export interface IpcDeps {
 }
 
 const PICK_KINDS: readonly string[] = ['file', 'app', 'image'];
+const BUTTON_ID_RE = /^[A-Za-z0-9-]{1,64}$/;
 
 function assertString(v: unknown, name: string): asserts v is string {
   if (typeof v !== 'string' || v.length === 0) throw new Error(`invalid ${name}`);
+}
+function assertButtonId(v: unknown): asserts v is string {
+  if (typeof v !== 'string' || !BUTTON_ID_RE.test(v)) throw new Error('invalid button id');
 }
 function assertBoolean(v: unknown, name: string): asserts v is boolean {
   if (typeof v !== 'boolean') throw new Error(`invalid ${name}`);
@@ -34,18 +38,19 @@ export function registerIpc(deps: IpcDeps): void {
     deps.store.save(cfg);
     try {
       deps.onConfigSaved(cfg);
-    } catch {
+    } catch (err) {
+      console.error('onConfigSaved hook failed:', err);
       // Hook failure must not reject the save.
     }
   });
 
   ipcMain.handle(IPC.runAction, async (_e, id: unknown) => {
-    assertString(id, 'button id');
+    assertButtonId(id);
     await deps.runAction(id);
   });
 
   ipcMain.handle(IPC.stopAction, async (_e, id: unknown) => {
-    assertString(id, 'button id');
+    assertButtonId(id);
     deps.stopAction(id);
   });
 
@@ -58,7 +63,7 @@ export function registerIpc(deps: IpcDeps): void {
 
   ipcMain.handle(IPC.extractIcon, async (_e, path: unknown, buttonId: unknown) => {
     assertString(path, 'path');
-    assertString(buttonId, 'button id');
+    assertButtonId(buttonId);
     return deps.extractIcon(path, buttonId);
   });
 

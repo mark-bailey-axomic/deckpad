@@ -4,7 +4,7 @@ import { baseWindowOptions } from './window-options';
 import { ConfigStore } from './config-store';
 import { registerIpc } from './ipc';
 
-const store = new ConfigStore(join(app.getPath('userData')));
+const store = new ConfigStore(app.getPath('userData'));
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({

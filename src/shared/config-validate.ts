@@ -13,9 +13,25 @@ function validateButton(slot: unknown): boolean {
   if (!isObject(slot)) return false;
   if (typeof slot['id'] !== 'string') return false;
   if (typeof slot['label'] !== 'string') return false;
-  if (!VALID_BUTTON_TYPES.has(slot['type'] as string)) return false;
+  const type = slot['type'] as string;
+  if (!VALID_BUTTON_TYPES.has(type)) return false;
   if (!isObject(slot['icon'])) return false;
-  if (!VALID_ICON_KINDS.has((slot['icon'] as Record<string, unknown>)['kind'] as string)) return false;
+  const icon = slot['icon'] as Record<string, unknown>;
+  if (!VALID_ICON_KINDS.has(icon['kind'] as string)) return false;
+
+  // Optional field type checks
+  if ('command' in slot && typeof slot['command'] !== 'string') return false;
+  if ('cwd' in slot && typeof slot['cwd'] !== 'string') return false;
+  if ('path' in slot && typeof slot['path'] !== 'string') return false;
+  if ('showTerminal' in slot && typeof slot['showTerminal'] !== 'boolean') return false;
+  if ('emoji' in icon && typeof icon['emoji'] !== 'string') return false;
+  if ('tileColor' in icon && typeof icon['tileColor'] !== 'string') return false;
+  if ('sourcePath' in icon && typeof icon['sourcePath'] !== 'string') return false;
+
+  // Per-type required payload
+  if (type === 'command' && typeof slot['command'] !== 'string') return false;
+  if ((type === 'file' || type === 'app') && typeof slot['path'] !== 'string') return false;
+
   return true;
 }
 
@@ -28,10 +44,10 @@ export function validateConfig(value: unknown): value is Config {
   // grid
   const grid = value['grid'];
   if (!isObject(grid)) return false;
-  const cols = grid['cols'];
-  const rows = grid['rows'];
-  if (typeof cols !== 'number' || cols < GRID_LIMITS.cols.min || cols > GRID_LIMITS.cols.max) return false;
-  if (typeof rows !== 'number' || rows < GRID_LIMITS.rows.min || rows > GRID_LIMITS.rows.max) return false;
+  const cols = grid['cols'] as number;
+  const rows = grid['rows'] as number;
+  if (!Number.isInteger(cols) || cols < GRID_LIMITS.cols.min || cols > GRID_LIMITS.cols.max) return false;
+  if (!Number.isInteger(rows) || rows < GRID_LIMITS.rows.min || rows > GRID_LIMITS.rows.max) return false;
 
   // settings
   const settings = value['settings'];
@@ -46,7 +62,7 @@ export function validateConfig(value: unknown): value is Config {
   const groups = value['groups'];
   if (!Array.isArray(groups) || groups.length < 1) return false;
 
-  const expectedSlots = (cols as number) * (rows as number);
+  const expectedSlots = cols * rows;
   for (const group of groups) {
     if (!isObject(group)) return false;
     if (typeof group['id'] !== 'string') return false;

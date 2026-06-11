@@ -172,3 +172,61 @@ describe('action + system IPC', () => {
     await expect(invoke(IPC.saveConfig, bad)).rejects.toThrow(/invalid config/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase-4 review: buttonId format guard
+// ---------------------------------------------------------------------------
+
+describe('buttonId format guard', () => {
+  // icon:extract
+
+  it('icon:extract rejects a path-traversal button id', async () => {
+    await expect(invoke(IPC.extractIcon, '/some/path', '../../evil')).rejects.toThrow(/invalid button id/i);
+  });
+
+  it('icon:extract accepts a UUID-style button id', async () => {
+    await expect(invoke(IPC.extractIcon, '/some/path', 'b1-2c3d')).resolves.not.toThrow();
+    expect(deps.extractIcon).toHaveBeenCalledWith('/some/path', 'b1-2c3d');
+  });
+
+  it('icon:extract rejects an id that is exactly 65 chars (max is 64)', async () => {
+    const longId = 'a'.repeat(65);
+    await expect(invoke(IPC.extractIcon, '/some/path', longId)).rejects.toThrow(/invalid button id/i);
+  });
+
+  it('icon:extract accepts an id that is exactly 64 chars', async () => {
+    const maxId = 'a'.repeat(64);
+    await expect(invoke(IPC.extractIcon, '/some/path', maxId)).resolves.not.toThrow();
+  });
+
+  it('icon:extract rejects an id containing invalid characters (slash)', async () => {
+    await expect(invoke(IPC.extractIcon, '/some/path', 'btn/evil')).rejects.toThrow(/invalid button id/i);
+  });
+
+  // action:run
+
+  it('action:run rejects a path-traversal button id', async () => {
+    await expect(invoke(IPC.runAction, '../x')).rejects.toThrow(/invalid button id/i);
+  });
+
+  it('action:run accepts a valid alphanumeric-hyphen id', async () => {
+    await expect(invoke(IPC.runAction, 'abc-123')).resolves.not.toThrow();
+    expect(deps.runAction).toHaveBeenCalledWith('abc-123');
+  });
+
+  it('action:run rejects a 65-char id', async () => {
+    const longId = 'b'.repeat(65);
+    await expect(invoke(IPC.runAction, longId)).rejects.toThrow(/invalid button id/i);
+  });
+
+  // action:stop
+
+  it('action:stop rejects a path-traversal button id', async () => {
+    await expect(invoke(IPC.stopAction, '../x')).rejects.toThrow(/invalid button id/i);
+  });
+
+  it('action:stop accepts a valid alphanumeric-hyphen id', async () => {
+    await expect(invoke(IPC.stopAction, 'btn-ok')).resolves.not.toThrow();
+    expect(deps.stopAction).toHaveBeenCalledWith('btn-ok');
+  });
+});

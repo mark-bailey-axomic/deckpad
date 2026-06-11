@@ -209,4 +209,163 @@ describe('validateConfig', () => {
     cfg.groups[0].slots = Array(30).fill(null);
     expect(validateConfig(cfg)).toBe(true);
   });
+
+  // ---------------------------------------------------------------------------
+  // Phase-4 review: grid dims must be integers
+  // ---------------------------------------------------------------------------
+
+  it('rejects cols as a float (2.5)', () => {
+    const cfg = defaultConfig() as any;
+    cfg.grid = { cols: 2.5, rows: 4 };
+    cfg.groups[0].slots = Array(10).fill(null); // pad to 2.5 * 4
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('rejects cols as NaN', () => {
+    const cfg = defaultConfig() as any;
+    cfg.grid = { cols: NaN, rows: 3 };
+    cfg.groups[0].slots = Array(cfg.grid.rows).fill(null);
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase-4 review: optional Button field typing
+  // ---------------------------------------------------------------------------
+
+  it('rejects a button where command is an object instead of a string', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1',
+      label: 'X',
+      type: 'command',
+      command: {},
+      icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('rejects a button where cwd is a number instead of a string', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1',
+      label: 'X',
+      type: 'command',
+      command: 'echo hi',
+      cwd: 42,
+      icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it("rejects a button where showTerminal is the string 'yes' instead of boolean", () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1',
+      label: 'X',
+      type: 'command',
+      command: 'echo hi',
+      showTerminal: 'yes',
+      icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('rejects a button where path is an array instead of a string', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1',
+      label: 'X',
+      type: 'file',
+      path: [],
+      icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('rejects a button where icon.emoji is a number instead of a string', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1',
+      label: 'X',
+      type: 'command',
+      command: 'echo hi',
+      icon: { kind: 'emoji', emoji: 7 }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('rejects a button where icon.tileColor is an object instead of a string', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1',
+      label: 'X',
+      type: 'command',
+      command: 'echo hi',
+      icon: { kind: 'letter', tileColor: {} }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('rejects a button where icon.sourcePath is a number instead of a string', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1',
+      label: 'X',
+      type: 'app',
+      path: '/Applications/Foo.app',
+      icon: { kind: 'image', sourcePath: 1 }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('accepts a button with valid string icon fields', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1',
+      label: 'My Button',
+      type: 'command',
+      command: 'echo hi',
+      cwd: '/tmp',
+      showTerminal: true,
+      icon: { kind: 'emoji', emoji: '🚀', tileColor: '#34D399', sourcePath: '/some/path.png' }
+    };
+    expect(validateConfig(cfg)).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase-4 review: per-type required payload
+  // ---------------------------------------------------------------------------
+
+  it("rejects type:'command' without a command field", () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1',
+      label: 'X',
+      type: 'command',
+      icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it("rejects type:'file' without a path field", () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1',
+      label: 'X',
+      type: 'file',
+      icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it("rejects type:'app' without a path field", () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1',
+      label: 'X',
+      type: 'app',
+      icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
 });

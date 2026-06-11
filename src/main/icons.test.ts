@@ -38,7 +38,7 @@ describe('extractIcon', () => {
   });
 });
 
-import { copyCustomImage, deleteIconFiles, duplicateIconFiles } from './icons';
+import { copyCustomImage, deleteIconFiles, duplicateIconFiles, type CreateThumbnailFn } from './icons';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
 describe('icon cache lifecycle', () => {
@@ -100,5 +100,88 @@ describe('icon cache lifecycle', () => {
     // Extension must be lowercased in the URL and in the cache filename.
     expect(url).toBe('deckicon://b2-custom.png');
     expect(readFileSync(join(iconsDir, 'b2-custom.png'), 'utf8')).toBe('png-content');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// macOS thumbnail seam + platform-aware extractIcon
+// ---------------------------------------------------------------------------
+
+describe('extractIcon — darwin thumbnail path', () => {
+  it('uses createThumbnail on darwin, writes PNG, returns URL, never calls getFileIcon', async () => {
+    const getFileIcon = vi.fn<GetFileIconFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => Buffer.alloc(4) });
+    const createThumbnail = vi.fn<CreateThumbnailFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => png });
+
+    const url = await extractIcon(
+      { getFileIcon, createThumbnail, iconsDir: dir, platform: 'darwin' },
+      '/Applications/X.app',
+      'mac-1'
+    );
+
+    expect(url).toBe('deckicon://mac-1.png');
+    expect(readFileSync(join(dir, 'mac-1.png'))).toEqual(png);
+    expect(getFileIcon).not.toHaveBeenCalled();
+    expect(createThumbnail).toHaveBeenCalledWith('/Applications/X.app');
+  });
+
+  it('falls back to getFileIcon with size "normal" (not "large") when createThumbnail throws', async () => {
+    const getFileIcon = vi.fn<GetFileIconFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => png });
+    const createThumbnail = vi.fn<CreateThumbnailFn>().mockRejectedValue(new Error('thumbnail fail'));
+
+    const url = await extractIcon(
+      { getFileIcon, createThumbnail, iconsDir: dir, platform: 'darwin' },
+      '/Applications/Y.app',
+      'mac-2'
+    );
+
+    expect(url).toBe('deckicon://mac-2.png');
+    expect(getFileIcon).toHaveBeenCalledWith('/Applications/Y.app', { size: 'normal' });
+  });
+
+  it('falls back to getFileIcon with size "normal" when createThumbnail returns an empty image', async () => {
+    const getFileIcon = vi.fn<GetFileIconFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => png });
+    const createThumbnail = vi.fn<CreateThumbnailFn>().mockResolvedValue({ isEmpty: () => true, toPNG: () => Buffer.alloc(0) });
+
+    const url = await extractIcon(
+      { getFileIcon, createThumbnail, iconsDir: dir, platform: 'darwin' },
+      '/Applications/Z.app',
+      'mac-3'
+    );
+
+    expect(url).toBe('deckicon://mac-3.png');
+    expect(getFileIcon).toHaveBeenCalledWith('/Applications/Z.app', { size: 'normal' });
+    // Must NOT have been called with 'large'
+    expect(getFileIcon).not.toHaveBeenCalledWith(expect.anything(), { size: 'large' });
+  });
+});
+
+describe('extractIcon — win32/linux path unchanged', () => {
+  it('on win32 calls getFileIcon with size "large" and never calls createThumbnail', async () => {
+    const getFileIcon = vi.fn<GetFileIconFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => png });
+    const createThumbnail = vi.fn<CreateThumbnailFn>().mockResolvedValue({ isEmpty: () => false, toPNG: () => png });
+
+    const url = await extractIcon(
+      { getFileIcon, createThumbnail, iconsDir: dir, platform: 'win32' },
+      'C:\\Program Files\\App\\app.exe',
+      'win-1'
+    );
+
+    expect(url).toBe('deckicon://win-1.png');
+    expect(getFileIcon).toHaveBeenCalledWith('C:\\Program Files\\App\\app.exe', { size: 'large' });
+    expect(createThumbnail).not.toHaveBeenCalled();
+  });
+
+  it('on darwin: returns null when both createThumbnail and getFileIcon fallback both fail', async () => {
+    const getFileIcon = vi.fn<GetFileIconFn>().mockRejectedValue(new Error('getFileIcon fail'));
+    const createThumbnail = vi.fn<CreateThumbnailFn>().mockRejectedValue(new Error('thumbnail fail'));
+
+    const url = await extractIcon(
+      { getFileIcon, createThumbnail, iconsDir: dir, platform: 'darwin' },
+      '/Applications/Bad.app',
+      'mac-4'
+    );
+
+    expect(url).toBeNull();
+    expect(existsSync(join(dir, 'mac-4.png'))).toBe(false);
   });
 });

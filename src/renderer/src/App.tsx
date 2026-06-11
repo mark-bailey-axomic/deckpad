@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { BAR_H, GLOW, GRID_LIMITS, KEY_SIZE, GAP, PAD, RADIUS, SURFACES, TABS_H } from '@shared/constants';
+import { insertShiftReorder, resizeGroups } from '@shared/layout';
 import type { Button, Config, Group } from '@shared/types';
 import { getDeck } from './lib/deck';
 import { useActionStates, type FailInfo } from './hooks/useActionStates';
@@ -30,6 +31,10 @@ export function App(): ReactElement | null {
   const [pressedId, setPressedId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ gi: number; value: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // drag state
+  const dragFrom = useRef<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
 
   useEffect(() => { void deck.getConfig().then(setConfig); }, []);
 
@@ -100,6 +105,26 @@ export function App(): ReactElement | null {
       ...cfg,
       groups: cfg.groups.map((g, i) => (i === Math.min(active, cfg.groups.length - 1) ? { ...g, slots: fn(g.slots) } : g))
     }));
+
+  const onDrop = (idx: number) => {
+    const from = dragFrom.current;
+    dragFrom.current = null;
+    setDragOver(null);
+    if (from === null || from === idx) return;
+    setSlots((slots) => insertShiftReorder(slots, from, idx)); // persists via commit
+  };
+
+  /** Grid change with compact-on-shrink + confirm naming the losses.
+   *  Confirm runs OUTSIDE the state updater (updaters must stay pure under StrictMode). */
+  const changeGrid = (newCols: number, newRows: number) => {
+    const cfg = configRef.current;
+    if (!cfg) return;
+    const { groups, lost } = resizeGroups(cfg.groups, newCols, newRows);
+    if (lost > 0 && !window.confirm(`Shrinking the grid will delete ${lost} button${lost === 1 ? '' : 's'}. Continue?`)) {
+      return; // cancelled — grid unchanged
+    }
+    commit((prev) => ({ ...prev, grid: { cols: newCols, rows: newRows }, groups }));
+  };
 
   const pressKey = (idx: number) => {
     const b = group.slots[idx];
@@ -215,12 +240,12 @@ export function App(): ReactElement | null {
                 <div className="dp-pop-row">
                   <span>Columns</span>
                   <Stepper value={cols} min={GRID_LIMITS.cols.min} max={GRID_LIMITS.cols.max}
-                    onChange={(v) => commit((cfg) => ({ ...cfg, grid: { ...cfg.grid, cols: v } }))} suffix="" />
+                    onChange={(v) => changeGrid(v, rows)} suffix="" />
                 </div>
                 <div className="dp-pop-row">
                   <span>Rows</span>
                   <Stepper value={rows} min={GRID_LIMITS.rows.min} max={GRID_LIMITS.rows.max}
-                    onChange={(v) => commit((cfg) => ({ ...cfg, grid: { ...cfg.grid, rows: v } }))} suffix="" />
+                    onChange={(v) => changeGrid(cols, v)} suffix="" />
                 </div>
               </div>
             )}
@@ -278,14 +303,14 @@ export function App(): ReactElement | null {
             now={now} accent={accent} editMode={editMode}
             showLabels={config.settings.showLabels}
             pressed={pressedId !== null && pressedId === s?.id}
-            dragOver={false}
+            dragOver={dragOver === idx}
             onPress={() => pressKey(idx)}
             onStop={() => { if (s) stop(s.id); }}
             onContext={(e) => { e.preventDefault(); e.stopPropagation(); if (s) setMenu({ x: e.clientX, y: e.clientY, index: idx }); }}
             onDelete={() => { if (s) stopIfActive(s.id); setSlots((slots) => slots.map((k, j) => (j === idx ? null : k))); }}
-            onDragStart={() => {}}
-            onDragOver={() => {}}
-            onDrop={() => {}} />
+            onDragStart={() => { dragFrom.current = idx; }}
+            onDragOver={(e) => { if (editMode) { e.preventDefault(); setDragOver(idx); } }}
+            onDrop={() => onDrop(idx)} />
         ))}
       </div>
 

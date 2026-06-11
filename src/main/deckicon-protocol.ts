@@ -1,4 +1,5 @@
 import { protocol, net } from 'electron';
+import { realpathSync } from 'node:fs';
 import { isAbsolute, join, normalize, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -30,9 +31,26 @@ export function registerDeckIconScheme(): void {
 
 /** Call after app ready. */
 export function registerDeckIconProtocol(iconsDir: string): void {
-  protocol.handle(DECKICON_SCHEME, (request) => {
+  protocol.handle(DECKICON_SCHEME, async (request) => {
     const file = resolveIconPath(iconsDir, request.url);
     if (!file) return new Response('forbidden', { status: 403 });
-    return net.fetch(pathToFileURL(file).toString());
+
+    // Containment re-check after symlink resolution (tolerate ENOENT).
+    try {
+      const real = realpathSync(file);
+      const root = normalize(iconsDir) + sep;
+      if (!real.startsWith(root)) return new Response('forbidden', { status: 403 });
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        return new Response('forbidden', { status: 403 });
+      }
+      // ENOENT: file doesn't exist yet — fall through to net.fetch which will 404.
+    }
+
+    try {
+      return await net.fetch(pathToFileURL(file).toString());
+    } catch {
+      return new Response('not found', { status: 404 });
+    }
   });
 }

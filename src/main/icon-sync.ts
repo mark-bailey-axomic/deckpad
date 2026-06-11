@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, unlinkSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import type { Button, Config } from '@shared/types';
 import { copyCustomImage, deleteIconFiles, duplicateIconFiles } from './icons';
@@ -20,10 +20,24 @@ export function syncIconCache(prev: Config, next: Config, iconsDir: string): voi
   }
 
   for (const [id, b] of after) {
-    // 2. Custom images: ensure <id>-custom.<ext> exists for image-kind buttons.
+    // 2. Custom images: copy (or refresh) <id>-custom.<ext> for image-kind buttons.
     if (b.icon.kind === 'image' && b.icon.sourcePath) {
-      const target = join(iconsDir, `${id}-custom${extname(b.icon.sourcePath).toLowerCase()}`);
-      if (!existsSync(target) && existsSync(b.icon.sourcePath)) {
+      const prevButton = before.get(id);
+      const prevSourcePath = prevButton?.icon.kind === 'image' ? prevButton.icon.sourcePath : undefined;
+      const sourceChanged = prevSourcePath !== b.icon.sourcePath;
+      const newExt = extname(b.icon.sourcePath).toLowerCase();
+      const target = join(iconsDir, `${id}-custom${newExt}`);
+      const needsCopy = sourceChanged || !existsSync(target);
+
+      if (needsCopy && existsSync(b.icon.sourcePath)) {
+        // Remove stale cached file if extension changed.
+        if (sourceChanged && prevSourcePath) {
+          const oldExt = extname(prevSourcePath).toLowerCase();
+          if (oldExt !== newExt) {
+            const oldTarget = join(iconsDir, `${id}-custom${oldExt}`);
+            try { unlinkSync(oldTarget); } catch { /* already gone */ }
+          }
+        }
         copyCustomImage(iconsDir, b.icon.sourcePath, id);
       }
     }

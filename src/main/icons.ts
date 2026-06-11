@@ -35,9 +35,12 @@ function listIcons(iconsDir: string): string[] {
   }
 }
 
-/** Copy a user image (png/jpg/svg/ico) to <buttonId>-custom.<ext>; returns its deckicon URL. */
-export function copyCustomImage(iconsDir: string, sourcePath: string, buttonId: string): string {
+const ALLOWED_IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.ico']);
+
+/** Copy a user image (png/jpg/jpeg/svg/ico) to <buttonId>-custom.<ext>; returns its deckicon URL, or null for disallowed extensions. */
+export function copyCustomImage(iconsDir: string, sourcePath: string, buttonId: string): string | null {
   const ext = extname(sourcePath).toLowerCase();
+  if (!ALLOWED_IMAGE_EXTS.has(ext)) return null;
   const name = `${buttonId}-custom${ext}`;
   mkdirSync(iconsDir, { recursive: true });
   copyFileSync(sourcePath, join(iconsDir, name));
@@ -46,7 +49,9 @@ export function copyCustomImage(iconsDir: string, sourcePath: string, buttonId: 
 
 export function deleteIconFiles(iconsDir: string, buttonId: string): void {
   for (const f of listIcons(iconsDir)) {
-    if (f === `${buttonId}.png` || f.startsWith(`${buttonId}-custom.`)) unlinkSync(join(iconsDir, f));
+    if (f === `${buttonId}.png` || f.startsWith(`${buttonId}-custom.`)) {
+      try { unlinkSync(join(iconsDir, f)); } catch { /* ignore individual unlink failures */ }
+    }
   }
 }
 

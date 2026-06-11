@@ -59,4 +59,46 @@ describe('syncIconCache', () => {
     const cfg = cfgWith(btn('b1'));
     expect(() => syncIconCache(cfg, cfg, iconsDir)).not.toThrow();
   });
+
+  // ---------------------------------------------------------------------------
+  // Phase-6 review: custom image refresh
+  // ---------------------------------------------------------------------------
+
+  it('refreshes cached custom image when sourcePath changes to a different source file (same extension)', () => {
+    // Set up two source files with distinct content.
+    const src1 = join(dir, 'logo-v1.png');
+    const src2 = join(dir, 'logo-v2.png');
+    writeFileSync(src1, 'old-image-data');
+    writeFileSync(src2, 'new-image-data');
+
+    // Pre-populate cache as if src1 was previously synced.
+    writeFileSync(join(iconsDir, 'b1-custom.png'), 'old-image-data');
+
+    const prev = cfgWith(btn('b1', { icon: { kind: 'image', sourcePath: src1 } }));
+    const next = cfgWith(btn('b1', { icon: { kind: 'image', sourcePath: src2 } }));
+
+    syncIconCache(prev, next, iconsDir);
+
+    // The cached file must reflect the NEW source content.
+    expect(readFileSync(join(iconsDir, 'b1-custom.png'), 'utf8')).toBe('new-image-data');
+  });
+
+  it('removes old cached extension file and writes new one when sourcePath extension changes (png → jpg)', () => {
+    const srcPng = join(dir, 'icon.png');
+    const srcJpg = join(dir, 'icon.jpg');
+    writeFileSync(srcPng, 'png-data');
+    writeFileSync(srcJpg, 'jpg-data');
+
+    // Pre-populate old cache with .png extension.
+    writeFileSync(join(iconsDir, 'b1-custom.png'), 'png-data');
+
+    const prev = cfgWith(btn('b1', { icon: { kind: 'image', sourcePath: srcPng } }));
+    const next = cfgWith(btn('b1', { icon: { kind: 'image', sourcePath: srcJpg } }));
+
+    syncIconCache(prev, next, iconsDir);
+
+    // Old extension must be gone; new extension must be present.
+    expect(existsSync(join(iconsDir, 'b1-custom.png'))).toBe(false);
+    expect(readFileSync(join(iconsDir, 'b1-custom.jpg'), 'utf8')).toBe('jpg-data');
+  });
 });

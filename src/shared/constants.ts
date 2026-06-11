@@ -31,6 +31,9 @@ export const OUTPUT_BATCH_MS = 50;
 export const RUNNING_REVEAL_MS = 300; // exits faster than this skip visible running
 export const SIGKILL_ESCALATION_MS = 3000;
 
+// Button ID format — single source of truth shared by IPC and config-validate
+export const BUTTON_ID_RE = /^[A-Za-z0-9-]{1,64}$/;
+
 // IPC channel names — single source of truth for preload + main
 export const IPC = {
   getConfig: 'config:get',

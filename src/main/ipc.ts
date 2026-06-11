@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { IPC } from '@shared/constants';
+import { BUTTON_ID_RE, IPC } from '@shared/constants';
 import { isUntracked } from '@shared/buttons';
 import type { Button, Config, PickKind, RunningSnapshot } from '@shared/types';
 import type { ConfigStore } from './config-store';
@@ -35,7 +35,6 @@ export interface IpcDeps {
 }
 
 const PICK_KINDS: readonly string[] = ['file', 'app', 'image'];
-const BUTTON_ID_RE = /^[A-Za-z0-9-]{1,64}$/;
 
 function assertString(v: unknown, name: string): asserts v is string {
   if (typeof v !== 'string' || v.length === 0) throw new Error(`invalid ${name}`);

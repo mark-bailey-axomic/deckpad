@@ -1,4 +1,4 @@
-import { GRID_LIMITS, SURFACES } from './constants';
+import { BUTTON_ID_RE, GRID_LIMITS, SURFACES } from './constants';
 import type { Config } from './types';
 
 const VALID_BUTTON_TYPES = new Set(['command', 'file', 'app']);
@@ -11,7 +11,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 
 function validateButton(slot: unknown): boolean {
   if (!isObject(slot)) return false;
-  if (typeof slot['id'] !== 'string') return false;
+  if (typeof slot['id'] !== 'string' || !BUTTON_ID_RE.test(slot['id'])) return false;
   if (typeof slot['label'] !== 'string') return false;
   const type = slot['type'] as string;
   if (!VALID_BUTTON_TYPES.has(type)) return false;

@@ -345,4 +345,68 @@ describe('validateConfig', () => {
     };
     expect(validateConfig(cfg)).toBe(true);
   });
+
+  // ---------------------------------------------------------------------------
+  // Phase-6 review: button id charset must match IPC layer /^[A-Za-z0-9-]{1,64}$/
+  // ---------------------------------------------------------------------------
+
+  it('rejects a button id containing path traversal characters (../../../evil)', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: '../../../evil',
+      label: 'X',
+      type: 'command',
+      command: 'echo hi',
+      icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it("rejects a button id that is 65 characters long (exceeds the 64-char max)", () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'a'.repeat(65),
+      label: 'X',
+      type: 'command',
+      command: 'echo hi',
+      icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it("rejects a button id containing a forward slash", () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'a/b',
+      label: 'X',
+      type: 'command',
+      command: 'echo hi',
+      icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it("rejects a button id containing a backslash", () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'a\\b',
+      label: 'X',
+      type: 'command',
+      command: 'echo hi',
+      icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it("accepts a normal UUID-style button id matching /^[A-Za-z0-9-]{1,64}$/", () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: '3f8a1b2c-dead-beef-cafe-0123456789ab',
+      label: 'X',
+      type: 'command',
+      command: 'echo hi',
+      icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(true);
+  });
 });

@@ -77,4 +77,28 @@ describe('icon cache lifecycle', () => {
     expect(() => deleteIconFiles(join(dir, 'nope'), 'b1')).not.toThrow();
     expect(() => duplicateIconFiles(join(dir, 'nope'), 'b1', 'b2')).not.toThrow();
   });
+
+  // ---------------------------------------------------------------------------
+  // Phase-6 review: copyCustomImage extension whitelist
+  // ---------------------------------------------------------------------------
+
+  it('rejects sourcePath with a disallowed extension (x.html) — returns null and writes nothing', () => {
+    const src = join(dir, 'x.html');
+    writeFileSync(src, '<html/>');
+    const iconsDir = join(dir, 'icons-html');
+    // copyCustomImage should return null for disallowed extensions without writing files.
+    const result = copyCustomImage(iconsDir, src, 'b1');
+    expect(result).toBeNull();
+    expect(existsSync(join(iconsDir, 'b1-custom.html'))).toBe(false);
+  });
+
+  it('accepts sourcePath with uppercase extension (.PNG) and normalises to lowercase in the cache filename', () => {
+    const src = join(dir, 'icon.PNG');
+    writeFileSync(src, 'png-content');
+    const iconsDir = join(dir, 'icons-upper');
+    const url = copyCustomImage(iconsDir, src, 'b2');
+    // Extension must be lowercased in the URL and in the cache filename.
+    expect(url).toBe('deckicon://b2-custom.png');
+    expect(readFileSync(join(iconsDir, 'b2-custom.png'), 'utf8')).toBe('png-content');
+  });
 });

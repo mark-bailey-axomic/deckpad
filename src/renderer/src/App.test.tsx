@@ -410,6 +410,29 @@ describe('duplicate + groups', () => {
   });
 });
 
+describe('window chrome', () => {
+  it('macOS: bar has is-mac padding class and no close button', async () => {
+    render(<App />);
+    await screen.findByText('Actions');
+    expect(document.querySelector('.dp-bar')!.className).toContain('is-mac');
+    expect(screen.queryByLabelText('Close window')).toBeNull();
+  });
+
+  it('non-macOS: renders the × close button which closes the window', async () => {
+    const deck = getDeck();
+    const original = deck.platform;
+    Object.defineProperty(deck, 'platform', { value: 'win32', configurable: true });
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {});
+    render(<App />);
+    await screen.findByText('Actions');
+    expect(document.querySelector('.dp-bar')!.className).not.toContain('is-mac');
+    fireEvent.click(screen.getByLabelText('Close window'));
+    expect(closeSpy).toHaveBeenCalled();
+    closeSpy.mockRestore();
+    Object.defineProperty(deck, 'platform', { value: original, configurable: true });
+  });
+});
+
 describe('settings wiring', () => {
   beforeEach(async () => {
     await seedConfig([]);

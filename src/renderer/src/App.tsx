@@ -241,7 +241,7 @@ export function App(): ReactElement | null {
       } as CSSProperties}
     >
       {/* top bar */}
-      <div className="dp-bar" style={{ height: BAR_H }}>
+      <div className={'dp-bar' + (deck.platform === 'darwin' ? ' is-mac' : '')} style={{ height: BAR_H }}>
         <div className="dp-brand">
           <span className="dp-mark" style={{ background: accent }}><DeckIcon name="bolt" size={13} style={{ color: '#0b0b0d' }} /></span>
           <span className="dp-brand-name">DeckPad</span>
@@ -278,6 +278,11 @@ export function App(): ReactElement | null {
           <button className={'dp-icon-btn' + (settingsOpen ? ' is-active' : '')} onClick={(e) => { e.stopPropagation(); setSettingsOpen((o) => !o); }} title="Settings">
             <DeckIcon name="gear" size={18} />
           </button>
+          {deck.platform !== 'darwin' && (
+            <button className="dp-close-btn" aria-label="Close window" onClick={() => window.close()}>
+              <DeckIcon name="close" size={15} />
+            </button>
+          )}
         </div>
       </div>
 

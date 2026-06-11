@@ -1,8 +1,10 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, dialog, shell } from 'electron';
 import { spawn, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { extractIcon } from './icons';
 import { registerDeckIconScheme, registerDeckIconProtocol } from './deckicon-protocol';
+import { syncIconCache } from './icon-sync';
+import type { PickKind } from '@shared/types';
 
 registerDeckIconScheme();
 import { IPC } from '@shared/constants';
@@ -17,6 +19,22 @@ import { launchUntracked } from './launchers';
 const store = new ConfigStore(app.getPath('userData'));
 const iconsDir = join(app.getPath('userData'), 'icons');
 let mainWindow: BrowserWindow | null = null;
+let lastConfig = store.load();
+
+const PICK_FILTERS: Record<PickKind, Electron.FileFilter[] | undefined> = {
+  image: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'svg', 'ico'] }],
+  app: process.platform === 'win32' ? [{ name: 'Applications', extensions: ['exe', 'lnk'] }] : undefined,
+  file: undefined
+};
+
+async function pickFile(kind: PickKind): Promise<string | null> {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    properties: kind === 'app' && process.platform === 'darwin' ? ['openFile'] : ['openFile', 'showHiddenFiles'],
+    defaultPath: kind === 'app' && process.platform === 'darwin' ? '/Applications' : undefined,
+    filters: PICK_FILTERS[kind]
+  });
+  return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+}
 
 const sendActionState = (e: ActionStateEvent): void => {
   if (mainWindow && !mainWindow.webContents.isDestroyed()) {
@@ -67,11 +85,14 @@ void app.whenReady().then(() => {
   registerDeckIconProtocol(iconsDir);
   registerIpc({
     store,
-    onConfigSaved: () => undefined, // icon sync (Task 25) + resize (Task 30)
+    onConfigSaved: (cfg) => {
+      syncIconCache(lastConfig, cfg, iconsDir);
+      lastConfig = cfg;
+    },
     runAction,
     stopAction: (id) => runner.stop(id),
     getRunning: () => runner.snapshot(),
-    pickFile: async () => null, // Task 25
+    pickFile,
     extractIcon: (path, buttonId) =>
       extractIcon(
         { getFileIcon: (p) => app.getFileIcon(p, { size: 'large' }), iconsDir },

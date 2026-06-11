@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron';
 import { spawn, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { extractIcon } from './icons';
@@ -103,7 +103,11 @@ void app.whenReady().then(() => {
     pickFile,
     extractIcon: (path, buttonId) =>
       extractIcon(
-        { getFileIcon: (p) => app.getFileIcon(p, { size: 'large' }), iconsDir },
+        {
+          getFileIcon: (p, opts) => app.getFileIcon(p, { size: opts?.size ?? 'normal' }),
+          createThumbnail: (p) => nativeImage.createThumbnailFromPath(p, { width: 256, height: 256 }),
+          iconsDir
+        },
         path,
         buttonId
       ),

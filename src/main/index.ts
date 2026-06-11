@@ -11,6 +11,7 @@ import { IPC } from '@shared/constants';
 import { findButton } from '@shared/buttons';
 import type { ActionStateEvent } from '@shared/types';
 import { baseWindowOptions } from './window-options';
+import { windowSizeForGrid } from './window-size';
 import { ConfigStore } from './config-store';
 import { makeRunActionHandler, registerIpc } from './ipc';
 import { Runner } from './runner';
@@ -69,10 +70,11 @@ const runAction = makeRunActionHandler({
     })
 });
 
-function createWindow(): BrowserWindow {
+function createWindow(grid: { cols: number; rows: number }): BrowserWindow {
+  const { width, height } = windowSizeForGrid(grid.cols, grid.rows);
   const win = new BrowserWindow({
-    width: 488,
-    height: 514,
+    width,
+    height,
     ...baseWindowOptions(join(__dirname, '../preload/index.js'))
   });
   if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL);
@@ -88,6 +90,11 @@ void app.whenReady().then(() => {
     onConfigSaved: (cfg) => {
       syncIconCache(lastConfig, cfg, iconsDir);
       lastConfig = cfg;
+      if (mainWindow) {
+        const { width, height } = windowSizeForGrid(cfg.grid.cols, cfg.grid.rows);
+        const [w, h] = mainWindow.getSize();
+        if (w !== width || h !== height) mainWindow.setSize(width, height, true);
+      }
     },
     runAction,
     stopAction: (id) => runner.stop(id),
@@ -102,7 +109,7 @@ void app.whenReady().then(() => {
     setAlwaysOnTop: (v) => mainWindow?.setAlwaysOnTop(v),
     setLoginItem: (v) => app.setLoginItemSettings({ openAtLogin: v })
   });
-  mainWindow = createWindow();
+  mainWindow = createWindow(lastConfig.grid);
   mainWindow.on('closed', () => {
     mainWindow = null;
   });

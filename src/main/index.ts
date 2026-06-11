@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron';
 import { spawn, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+import { extractIcon } from './icons';
 import { IPC } from '@shared/constants';
 import { findButton } from '@shared/buttons';
 import type { ActionStateEvent } from '@shared/types';
@@ -11,6 +12,7 @@ import { Runner } from './runner';
 import { launchUntracked } from './launchers';
 
 const store = new ConfigStore(app.getPath('userData'));
+const iconsDir = join(app.getPath('userData'), 'icons');
 let mainWindow: BrowserWindow | null = null;
 
 const sendActionState = (e: ActionStateEvent): void => {
@@ -66,7 +68,12 @@ void app.whenReady().then(() => {
     stopAction: (id) => runner.stop(id),
     getRunning: () => runner.snapshot(),
     pickFile: async () => null, // Task 25
-    extractIcon: async () => null, // Task 23
+    extractIcon: (path, buttonId) =>
+      extractIcon(
+        { getFileIcon: (p) => app.getFileIcon(p, { size: 'large' }), iconsDir },
+        path,
+        buttonId
+      ),
     setAlwaysOnTop: () => undefined, // Task 29
     setLoginItem: () => undefined // Task 29
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { join, normalize, sep } from 'node:path';
+import { normalize, sep } from 'node:path';
 import { resolveIconPath } from './deckicon-protocol';
 
 const ICONS = `${sep}data${sep}userData${sep}icons`;

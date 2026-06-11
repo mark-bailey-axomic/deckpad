@@ -42,10 +42,6 @@ export class Runner {
     return this.runs.has(id);
   }
 
-  hasRunning(): boolean {
-    return this.runs.size > 0;
-  }
-
   runningCount(): number {
     return this.runs.size;
   }

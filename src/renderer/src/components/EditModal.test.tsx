@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { EditModal, newDraft } from './EditModal';
-import type { Button } from '@shared/types';
 
 const baseProps = {
   accent: '#34D399',

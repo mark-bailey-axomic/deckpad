@@ -6,7 +6,7 @@ A cross-platform (macOS/Windows, graceful Linux) Electron Stream Deck–style la
 
 ```sh
 npm install && npm start   # electron-vite dev server (hot-reload)
-npm test                   # Vitest — 278 tests (npx vitest run)
+npm test                   # Vitest — 286 tests (npx vitest run)
 npm run typecheck          # tsc --noEmit
 ```
 

@@ -92,6 +92,8 @@ describe('EditModal', () => {
     fireEvent.change(screen.getByPlaceholderText('e.g. Dev Server'), { target: { value: 'X' } });
     fireEvent.click(screen.getByText('Choose image…'));
     await waitFor(() => expect(pickFile).toHaveBeenCalledWith('image'));
+    // Wait for the async pick → setState to land (button gains is-on) before saving.
+    await waitFor(() => expect(screen.getByText('Choose image…').closest('button')).toHaveClass('is-on'));
     fireEvent.click(screen.getByRole('button', { name: 'Save action' }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       icon: expect.objectContaining({ kind: 'image', sourcePath: '/Users/x/logo.svg' })

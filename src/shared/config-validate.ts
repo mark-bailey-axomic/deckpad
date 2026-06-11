@@ -28,10 +28,8 @@ function validateButton(slot: unknown): boolean {
   if ('tileColor' in icon && typeof icon['tileColor'] !== 'string') return false;
   if ('sourcePath' in icon && typeof icon['sourcePath'] !== 'string') return false;
 
-  // Per-type required payload
-  if (type === 'command' && typeof slot['command'] !== 'string') return false;
-  if ((type === 'file' || type === 'app') && typeof slot['path'] !== 'string') return false;
-
+  // Payload fields stay optional: the modal allows saving before a path/command
+  // is chosen, so requiredness is UX territory — the runner must handle absence.
   return true;
 }
 

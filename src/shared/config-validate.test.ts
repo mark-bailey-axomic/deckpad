@@ -332,22 +332,10 @@ describe('validateConfig', () => {
     expect(validateConfig(cfg)).toBe(true);
   });
 
-  // ---------------------------------------------------------------------------
-  // Phase-4 review: per-type required payload
-  // ---------------------------------------------------------------------------
-
-  it("rejects type:'command' without a command field", () => {
-    const cfg = defaultConfig() as any;
-    cfg.groups[0].slots[0] = {
-      id: 'b1',
-      label: 'X',
-      type: 'command',
-      icon: { kind: 'auto' }
-    };
-    expect(validateConfig(cfg)).toBe(false);
-  });
-
-  it("rejects type:'file' without a path field", () => {
+  // Per-type required payload deliberately NOT enforced here: the modal lets a
+  // user save before picking a path/command (Save is gated on label only), so a
+  // payload-less button is a legal persisted state the runner handles gracefully.
+  it("accepts type:'file' without a path field (saved before picking)", () => {
     const cfg = defaultConfig() as any;
     cfg.groups[0].slots[0] = {
       id: 'b1',
@@ -355,17 +343,6 @@ describe('validateConfig', () => {
       type: 'file',
       icon: { kind: 'auto' }
     };
-    expect(validateConfig(cfg)).toBe(false);
-  });
-
-  it("rejects type:'app' without a path field", () => {
-    const cfg = defaultConfig() as any;
-    cfg.groups[0].slots[0] = {
-      id: 'b1',
-      label: 'X',
-      type: 'app',
-      icon: { kind: 'auto' }
-    };
-    expect(validateConfig(cfg)).toBe(false);
+    expect(validateConfig(cfg)).toBe(true);
   });
 });

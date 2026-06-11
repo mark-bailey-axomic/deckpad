@@ -104,22 +104,6 @@ describe('Runner.run', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Review-mandated: unknown button id must reject, never spawn
-  // -------------------------------------------------------------------------
-
-  it('run() with a button id not present in config rejects with /unknown button|not found/i without spawning', async () => {
-    // Runner.run takes a Button directly (config resolution happens in makeRunActionHandler).
-    // The review-mandated guard lives in makeRunActionHandler (Task 22).
-    // Here we confirm that Runner itself does not crash on a button it hasn't seen before,
-    // and that makeRunActionHandler rejects the unknown id without calling Runner.run.
-    // (Runner.run signature takes a Button value; the unknown-id guard is in ipc.test.ts Task 22 block.)
-    // This test documents the Runner's own contract: running a Button object always proceeds.
-    // The "unknown button id" rejection is covered in the makeRunActionHandler routing block below.
-    // This case is a no-op placeholder — the real assertion lives in ipc.test.ts.
-    expect(true).toBe(true); // contract note: see makeRunActionHandler routing tests in ipc.test.ts
-  });
-
-  // -------------------------------------------------------------------------
   // Review-mandated: exited event after dispose() must not throw or send
   // -------------------------------------------------------------------------
 
@@ -190,5 +174,127 @@ describe('Runner.stop — tree kill', () => {
     runner.killAll();
     expect(kill).toHaveBeenCalledWith(-4242, 'SIGTERM');
     expect(kill).toHaveBeenCalledWith(-5151, 'SIGTERM');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Review phase-5 additional contracts
+// ---------------------------------------------------------------------------
+
+describe('Runner.stop — double-stop is a no-op', () => {
+  it('calling stop twice within the grace window sends SIGTERM exactly once, SIGKILL exactly once, no orphaned timer', () => {
+    runner.run(button()); // pid 4242
+
+    runner.stop('b1'); // first stop: SIGTERM + arms 3 s timer
+    runner.stop('b1'); // second stop: must be a no-op (run still in map, timer already set)
+
+    // SIGTERM sent exactly once
+    expect(kill).toHaveBeenCalledTimes(1);
+    expect(kill).toHaveBeenCalledWith(-4242, 'SIGTERM');
+
+    // Advance to just before the grace window — no SIGKILL yet
+    vi.advanceTimersByTime(2999);
+    expect(kill).toHaveBeenCalledTimes(1);
+
+    // Grace window fires — SIGKILL sent exactly once
+    vi.advanceTimersByTime(1);
+    expect(kill).toHaveBeenCalledTimes(2);
+    expect(kill).toHaveBeenCalledWith(-4242, 'SIGKILL');
+
+    // Simulate the process finally exiting
+    child.emit('exit', 143);
+    expect(runner.isRunning('b1')).toBe(false);
+
+    // Start a NEW run for a different button; advance 3 s more — old or new pgid must NOT be killed again
+    const child2 = new FakeChild();
+    child2.pid = 9999;
+    spawn.mockReturnValueOnce(child2);
+    runner.run(button({ id: 'b2' }));
+    vi.advanceTimersByTime(3000);
+    // Still exactly 2 kill calls — the orphaned-timer-from-first-run must not fire against child2
+    expect(kill).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Runner.stop — ESRCH tolerated', () => {
+  it('stop() does not reject when kill throws ESRCH', () => {
+    const esrch = Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
+    kill.mockImplementation(() => { throw esrch; });
+    runner.run(button());
+    expect(() => runner.stop('b1')).not.toThrow();
+  });
+
+  it('escalation timer firing with a throwing kill does not produce an unhandled rejection', () => {
+    const esrch = Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
+    kill.mockImplementation(() => { throw esrch; });
+    runner.run(button());
+    runner.stop('b1');
+    // Advancing timers triggers the SIGKILL escalation — must not throw
+    expect(() => vi.advanceTimersByTime(3000)).not.toThrow();
+  });
+
+  it('killAll continues attempting remaining kills when one throws ESRCH', () => {
+    const c2 = new FakeChild();
+    c2.pid = 5151;
+    spawn.mockReturnValueOnce(child).mockReturnValueOnce(c2);
+    runner.run(button());
+    runner.run(button({ id: 'b2' }));
+
+    let callCount = 0;
+    kill.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
+    });
+
+    expect(() => runner.killAll()).not.toThrow();
+    // Second kill must still have been attempted despite first throwing
+    expect(kill).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Runner — stdio-after-exit ordering (close-based contract)', () => {
+  it('stdout data emitted after exit but before close is delivered in output BEFORE exited, and no output arrives after exited', () => {
+    // This test pins the desired contract: runner must listen for 'close' (not 'exit')
+    // so that stdio draining completes before finish() is called.
+    runner.run(button());
+
+    // Process exits with code 0 — runner should NOT call finish() yet
+    child.emit('exit', 0);
+
+    // Late stdout arrives while the stream is draining
+    child.stdout.emit('data', Buffer.from('late line\n'));
+
+    // Stream fully closes — finish() should be called here
+    child.emit('close', 0);
+
+    // Advance timers so the output batcher flushes (if not already flushed by dispose)
+    vi.advanceTimersByTime(50);
+
+    const types = events.map((e) => e.type);
+    const outputIdx = types.lastIndexOf('output');
+    const exitedIdx = types.indexOf('exited');
+
+    // output must come before exited
+    expect(exitedIdx).toBeGreaterThan(-1);
+    expect(outputIdx).toBeGreaterThan(-1);
+    expect(outputIdx).toBeLessThan(exitedIdx);
+
+    // No output event after exited
+    const afterExited = events.slice(exitedIdx + 1).filter((e) => e.type === 'output');
+    expect(afterExited).toHaveLength(0);
+  });
+});
+
+describe('Runner — late stdout after finish is dropped', () => {
+  it('output emitted after exited is delivered does not cause further send calls', () => {
+    runner.run(button());
+    child.emit('exit', 0); // finish() called; run removed from map
+    const sendCountAfterExit = events.length;
+
+    // More stdout arrives after finish — must be silently dropped
+    child.stdout.emit('data', Buffer.from('zombie output\n'));
+    vi.advanceTimersByTime(50);
+
+    expect(events.length).toBe(sendCountAfterExit);
   });
 });

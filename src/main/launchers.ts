@@ -34,7 +34,8 @@ export function terminalCommandFor(
   if (platform === 'win32') {
     return { cmd: 'cmd', args: ['/c', 'start', 'cmd', '/k', full] };
   }
-  return { cmd: pickLinuxTerminal(commandExists), args: ['-e', `sh -c ${JSON.stringify(full)}`] };
+  // Separate argv tokens: the terminal passes them straight to exec, no extra shell quoting layer.
+  return { cmd: pickLinuxTerminal(commandExists), args: ['-e', 'sh', '-c', full] };
 }
 
 const APP_BUNDLE_RE = /\.(app|exe|lnk)$/i;

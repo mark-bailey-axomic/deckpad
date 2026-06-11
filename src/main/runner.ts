@@ -18,6 +18,8 @@ interface Run {
   output: RingBuffer;
   batcher: OutputBatcher;
   killTimer?: ReturnType<typeof setTimeout>;
+  /** Set when 'exit' fired but finish() is deferred until 'close' (stdio still draining). */
+  exitCode?: number;
 }
 
 export class Runner {
@@ -64,7 +66,8 @@ export class Runner {
     const startedAt = Date.now();
     const output = new RingBuffer(OUTPUT_RING_CAPACITY);
     const batcher = new OutputBatcher(OUTPUT_BATCH_MS, (chunk) => {
-      output.push(...chunk.split('\n').filter((l) => l.length > 0));
+      // pushAll caps a firehose flush to the ring capacity without spreading huge arrays.
+      output.pushAll(chunk.split('\n').filter((l) => l.length > 0));
       this.send({ type: 'output', buttonId: id, chunk });
     });
 
@@ -83,14 +86,34 @@ export class Runner {
       batcher.push(`${err.message}\n`);
       this.finish(id, -1); // spec: spawn error treated as exit -1
     });
-    child.on('exit', (code: number | null) => this.finish(id, code ?? -1));
+    child.on('exit', (code: number | null) => {
+      const run = this.runs.get(id);
+      if (!run) return; // already finished (error path)
+      const exitCode = code ?? -1;
+      if (exitCode !== 0 || run.batcher.hasPending()) {
+        // Failure/signal exits (and exits with output already in hand) deliver immediately.
+        this.finish(id, exitCode);
+        return;
+      }
+      // Clean, quiet exit: defer to 'close' so draining stdio is flushed BEFORE 'exited'.
+      run.exitCode = exitCode;
+      run.batcher.hold();
+    });
+    child.on('close', (code: number | null) => {
+      const run = this.runs.get(id);
+      if (!run) return; // double-fire guard (error/exit already finished the run)
+      this.finish(id, run.exitCode ?? code ?? -1);
+    });
   }
 
   private finish(id: string, code: number): void {
     const run = this.runs.get(id);
-    if (!run) return; // already finished (error + exit double-fire)
-    run.batcher.dispose();
-    if (run.killTimer) clearTimeout(run.killTimer);
+    if (!run) return; // already finished (error + close double-fire)
+    run.batcher.dispose(); // flushes final output first; later pushes are dropped
+    if (run.killTimer) {
+      clearTimeout(run.killTimer);
+      run.killTimer = undefined;
+    }
     this.runs.delete(id);
     this.send({ type: 'exited', buttonId: id, code, ranFor: Date.now() - run.startedAt });
   }
@@ -99,19 +122,37 @@ export class Runner {
     const run = this.runs.get(id);
     const pid = run?.child.pid;
     if (!run || !pid) return;
+    if (run.killTimer) return; // stop already in progress: never re-signal or re-arm the timer
     if (this.platform === 'win32') {
-      // taskkill kills the whole tree forcibly; 'exit' on the child fires finish().
-      this.spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { shell: false });
+      // taskkill kills the whole tree forcibly; 'exit'/'close' on the child fires finish().
+      this.spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { shell: false })
+        .on('error', () => undefined); // taskkill unavailable/denied: nothing actionable
       return;
     }
     // POSIX: signal the process group (detached spawn made the child a group leader).
-    this.kill(-pid, 'SIGTERM');
+    try {
+      this.kill(-pid, 'SIGTERM');
+    } catch {
+      // ESRCH et al: group already gone; the child's 'close' will finish the run
+    }
     run.killTimer = setTimeout(() => {
-      if (this.runs.has(id)) this.kill(-pid, 'SIGKILL');
+      run.killTimer = undefined;
+      if (!this.runs.has(id)) return;
+      try {
+        this.kill(-pid, 'SIGKILL');
+      } catch {
+        // already dead between SIGTERM and escalation
+      }
     }, SIGKILL_ESCALATION_MS);
   }
 
   killAll(): void {
-    for (const id of [...this.runs.keys()]) this.stop(id);
+    for (const id of [...this.runs.keys()]) {
+      try {
+        this.stop(id);
+      } catch {
+        // keep stopping the remaining runs
+      }
+    }
   }
 }

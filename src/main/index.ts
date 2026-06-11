@@ -14,7 +14,9 @@ const store = new ConfigStore(app.getPath('userData'));
 let mainWindow: BrowserWindow | null = null;
 
 const sendActionState = (e: ActionStateEvent): void => {
-  mainWindow?.webContents.send(IPC.actionState, e);
+  if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+    mainWindow.webContents.send(IPC.actionState, e);
+  }
 };
 
 const runner = new Runner({ spawn, send: sendActionState });
@@ -30,8 +32,16 @@ const runAction = makeRunActionHandler({
       platform: process.platform,
       openPath: (p) => shell.openPath(p),
       openExternal: (url) => shell.openExternal(url),
-      spawnDetached: (cmd) => spawn(cmd, [], { detached: true, stdio: 'ignore' }).unref(),
-      runCommand: (cmd, args) => spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref(),
+      spawnDetached: (cmd) => {
+        const child = spawn(cmd, [], { detached: true, stdio: 'ignore' });
+        child.on('error', () => undefined); // missing binary: untracked launch, nothing to surface
+        child.unref();
+      },
+      runCommand: (cmd, args) => {
+        const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
+        child.on('error', () => undefined);
+        child.unref();
+      },
       commandExists
     })
 });
@@ -61,5 +71,8 @@ void app.whenReady().then(() => {
     setLoginItem: () => undefined // Task 29
   });
   mainWindow = createWindow();
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 });
 app.on('window-all-closed', () => app.quit());

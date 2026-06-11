@@ -2,6 +2,8 @@
 export class OutputBatcher {
   private pending = '';
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private held = false;
+  private disposed = false;
 
   constructor(
     private readonly intervalMs: number,
@@ -9,8 +11,22 @@ export class OutputBatcher {
   ) {}
 
   push(chunk: string): void {
+    if (this.disposed) return; // dispose() is terminal: late pushes are dropped
     this.pending += chunk;
-    this.timer ??= setTimeout(() => this.flush(), this.intervalMs);
+    if (!this.held) this.timer ??= setTimeout(() => this.flush(), this.intervalMs);
+  }
+
+  hasPending(): boolean {
+    return this.pending.length > 0;
+  }
+
+  /** Suspend timer flushes but keep accumulating (process exited, stdio still draining). */
+  hold(): void {
+    this.held = true;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
   }
 
   private flush(): void {
@@ -22,8 +38,9 @@ export class OutputBatcher {
     }
   }
 
-  /** Flush whatever is pending now (used on process exit). */
+  /** Flush whatever is pending now (used on process exit). Terminal: later pushes are dropped. */
   dispose(): void {
+    this.disposed = true;
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;

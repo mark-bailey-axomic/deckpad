@@ -85,22 +85,23 @@ describe('pickLinuxTerminal', () => {
 // -------------------------------------------------------------------------
 
 describe('launchUntracked — missing path guard', () => {
-  it('file button with no path does not call openPath (no-op / graceful)', async () => {
+  it('file button with no path: does not call openPath, openExternal, or spawnDetached', async () => {
     const d = deps('darwin');
-    // path is undefined — should not throw and should not call openPath with undefined
-    const b = btn({ type: 'file' }); // path omitted → undefined
-    await expect(launchUntracked(b, d)).resolves.not.toThrow();
-    // The implementation calls openPath('') for an empty string path — that is fine,
-    // but it must NOT throw and must NOT call openExternal.
+    // path omitted → undefined → coerced to '' → early return before any shell call
+    const b = btn({ type: 'file' }); // no path property
+    await expect(launchUntracked(b, d)).resolves.toBeUndefined();
+    expect(d.openPath).not.toHaveBeenCalled();
     expect(d.openExternal).not.toHaveBeenCalled();
+    expect(d.spawnDetached).not.toHaveBeenCalled();
   });
 
-  it('app button with no path does not call spawnDetached or openPath with meaningful path', async () => {
+  it('app button with no path: does not call openPath, openExternal, or spawnDetached', async () => {
     const d = deps('linux');
-    const b = btn({ type: 'app' }); // path omitted → undefined
-    await expect(launchUntracked(b, d)).resolves.not.toThrow();
-    // spawnDetached should not be called with an empty/undefined path
-    // (APP_BUNDLE_RE won't match '', so linux path -> spawnDetached('') — at minimum no throw)
-    // The key contract: no crash.
+    // path omitted → '' → early return before any shell call
+    const b = btn({ type: 'app' }); // no path property
+    await expect(launchUntracked(b, d)).resolves.toBeUndefined();
+    expect(d.openPath).not.toHaveBeenCalled();
+    expect(d.openExternal).not.toHaveBeenCalled();
+    expect(d.spawnDetached).not.toHaveBeenCalled();
   });
 });

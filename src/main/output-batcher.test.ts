@@ -35,4 +35,13 @@ describe('OutputBatcher', () => {
     vi.advanceTimersByTime(100);
     expect(flush).toHaveBeenCalledTimes(1);
   });
+
+  it('push after dispose is dropped: flush callback never fires', () => {
+    const flush = vi.fn();
+    const b = new OutputBatcher(50, flush);
+    b.dispose();
+    b.push('x');
+    vi.advanceTimersByTime(50);
+    expect(flush).not.toHaveBeenCalled();
+  });
 });

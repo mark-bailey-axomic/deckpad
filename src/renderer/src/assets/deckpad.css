@@ -71,6 +71,8 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
 .dp-tab-add{ flex:0 0 auto; width:26px; height:26px; border-radius:8px; display:grid; place-items:center;
   color:var(--fg-mute); transition:background .15s, color .15s; }
 .dp-tab-add:hover{ background:rgba(255,255,255,.06); color:var(--fg); }
+.dp-tab.is-edit{ animation:jiggle .32s ease-in-out infinite alternate; cursor:grab; }
+.dp-tab.is-dragover{ outline:2px dashed color-mix(in srgb,var(--accent) 70%,transparent); outline-offset:2px; }
 .dp-tabs-count{ flex:0 0 auto; font-size:11px; color:var(--fg-mute); padding-left:6px; }
 
 /* ---------- grid + keys ---------- */

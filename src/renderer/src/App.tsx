@@ -318,7 +318,7 @@ export function App(): ReactElement | null {
             return (
               <div key={g.id}
                 className={'dp-tab' + (isActive ? ' is-active' : '')
-                  + (editMode && config.groups.length > 1 ? ' is-edit' : '')
+                  + (editMode && !isRenaming && config.groups.length > 1 ? ' is-edit' : '')
                   + (groupDragOver === gi ? ' is-dragover' : '')}
                 draggable={editMode && !isRenaming && config.groups.length > 1}
                 onClick={() => { setActive(gi); setRenaming(null); }}

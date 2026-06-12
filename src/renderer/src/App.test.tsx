@@ -455,6 +455,19 @@ describe('group tab reorder', () => {
     expect(saveSpy).not.toHaveBeenCalled();
     saveSpy.mockRestore();
   });
+
+  it('a tab being renamed drops its edit affordance (no is-edit while renaming)', async () => {
+    await seedConfig([]);
+    render(<App />);
+    await screen.findByText('Actions');
+    fireEvent.click(screen.getByTitle('New group')); // 2 groups
+    fireEvent.click(screen.getByTitle('Edit layout'));
+    // sanity: in edit mode with >1 group the tab advertises the drag affordance
+    expect(document.querySelectorAll('.dp-tab')[0].className).toContain('is-edit');
+    // entering rename mode must drop the affordance (draggable is already off then)
+    fireEvent.doubleClick(document.querySelectorAll('.dp-tab')[0]);
+    expect(document.querySelectorAll('.dp-tab')[0].className).not.toContain('is-edit');
+  });
 });
 
 describe('window chrome', () => {

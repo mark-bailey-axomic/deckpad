@@ -132,9 +132,10 @@ export function App(): ReactElement | null {
     setGroupDragOver(null);
     if (from === null || from === gi) return;
     const activeId = config.groups[activeIndex].id;
-    const reordered = insertShiftReorder(config.groups, from, gi);
     commit((cfg) => ({ ...cfg, groups: insertShiftReorder(cfg.groups, from, gi) }));
-    setActive(indexOfId(reordered, activeId)); // active follows its group, not the index
+    // commit is synchronous and updates configRef.current — read the committed order back
+    // so the active group follows its tab regardless of index shifts.
+    setActive(indexOfId(configRef.current!.groups, activeId));
   };
 
   const onGroupDragEnd = () => {

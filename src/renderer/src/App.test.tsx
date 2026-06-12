@@ -427,9 +427,9 @@ describe('group tab reorder', () => {
     await waitFor(async () => {
       const cfg = await getDeck().getConfig();
       expect(cfg.groups.map((gr) => gr.name)).toEqual(['Group 2', 'Group 3', 'Actions']);
+      // active group ("Group 3") follows its tab, not the index
+      expect(document.querySelector('.dp-tab.is-active .dp-tab-name')?.textContent).toBe('Group 3');
     });
-    // active group ("Group 3") follows its tab, not the index
-    expect(document.querySelector('.dp-tab.is-active')?.textContent).toContain('Group 3');
   });
 
   it('tabs are not draggable outside edit mode', async () => {

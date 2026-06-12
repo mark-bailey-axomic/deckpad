@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { BAR_H, GLOW, GRID_LIMITS, KEY_SIZE, GAP, PAD, RADIUS, SURFACES, TABS_H } from '@shared/constants';
-import { insertShiftReorder, resizeGroups } from '@shared/layout';
+import { indexOfId, insertShiftReorder, resizeGroups } from '@shared/layout';
 import type { Button, Config, Group } from '@shared/types';
 import { getDeck } from './lib/deck';
 import { useActionStates, type FailInfo } from './hooks/useActionStates';
@@ -35,6 +35,10 @@ export function App(): ReactElement | null {
   // drag state
   const dragFrom = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
+
+  // group-tab drag state (separate from the key drag above so the two never interfere)
+  const groupDragFrom = useRef<number | null>(null);
+  const [groupDragOver, setGroupDragOver] = useState<number | null>(null);
 
   useEffect(() => { void deck.getConfig().then(setConfig); }, []);
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
@@ -119,6 +123,23 @@ export function App(): ReactElement | null {
   const onDragEnd = () => {
     dragFrom.current = null;
     setDragOver(null);
+  };
+
+  const onGroupDrop = (e: React.DragEvent, gi: number) => {
+    e.preventDefault();
+    const from = groupDragFrom.current;
+    groupDragFrom.current = null;
+    setGroupDragOver(null);
+    if (from === null || from === gi) return;
+    const activeId = config.groups[activeIndex].id;
+    const reordered = insertShiftReorder(config.groups, from, gi);
+    commit((cfg) => ({ ...cfg, groups: insertShiftReorder(cfg.groups, from, gi) }));
+    setActive(indexOfId(reordered, activeId)); // active follows its group, not the index
+  };
+
+  const onGroupDragEnd = () => {
+    groupDragFrom.current = null;
+    setGroupDragOver(null);
   };
 
   /** Grid change with compact-on-shrink + confirm naming the losses.
@@ -294,9 +315,17 @@ export function App(): ReactElement | null {
             const hasRunning = g.slots.some((k) => k && runtimes.get(k.id)?.state === 'running');
             const isRenaming = renaming !== null && renaming.gi === gi;
             return (
-              <div key={g.id} className={'dp-tab' + (isActive ? ' is-active' : '')}
+              <div key={g.id}
+                className={'dp-tab' + (isActive ? ' is-active' : '')
+                  + (editMode && config.groups.length > 1 ? ' is-edit' : '')
+                  + (groupDragOver === gi ? ' is-dragover' : '')}
+                draggable={editMode && !isRenaming && config.groups.length > 1}
                 onClick={() => { setActive(gi); setRenaming(null); }}
                 onDoubleClick={() => setRenaming({ gi, value: g.name })}
+                onDragStart={() => { setRenaming(null); groupDragFrom.current = gi; }}
+                onDragOver={(e) => { if (editMode && groupDragFrom.current !== null) { e.preventDefault(); setGroupDragOver(gi); } }}
+                onDragEnd={onGroupDragEnd}
+                onDrop={(e) => onGroupDrop(e, gi)}
                 title="Double-click to rename">
                 {hasRunning && <span className="dp-tab-dot" style={{ background: accent }} />}
                 {isRenaming ? (

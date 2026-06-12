@@ -18,6 +18,12 @@ export function insertShiftReorder<T>(slots: (T | null)[], from: number, to: num
   return next;
 }
 
+/** Index of the item whose id matches; 0 when absent (safe fallback for active-group tracking). */
+export function indexOfId(items: { id: string }[], id: string): number {
+  const i = items.findIndex((item) => item.id === id);
+  return i < 0 ? 0 : i;
+}
+
 /** Shrink: filled keys compact into the remaining slots; overflow is dropped and counted. */
 export function compactSlots<T>(slots: (T | null)[], capacity: number): { slots: (T | null)[]; lost: number } {
   const filled = slots.filter((s): s is T => s !== null);

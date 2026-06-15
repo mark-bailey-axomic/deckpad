@@ -170,6 +170,7 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; color
 .dp-key.is-edit:nth-child(2n){ animation-delay:-.16s; }
 .dp-key.is-edit:nth-child(3n){ animation-delay:-.24s; }
 @keyframes jiggle{ from{ transform:rotate(-.9deg); } to{ transform:rotate(.9deg); } }
+@media (prefers-reduced-motion: reduce){ .dp-tab.is-edit, .dp-key.is-edit{ animation:none; } }
 .dp-key.is-dragover{ outline:2px dashed color-mix(in srgb,var(--accent) 70%,transparent); outline-offset:2px; }
 .dp-key-del{ position:absolute; top:-6px; left:-6px; width:20px; height:20px; border-radius:50%;
   background:var(--rose-deep); color:#fff; display:grid; place-items:center; z-index:6;

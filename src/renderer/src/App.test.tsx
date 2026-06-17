@@ -410,6 +410,66 @@ describe('duplicate + groups', () => {
   });
 });
 
+describe('group tab reorder', () => {
+  it('drag-reorders tabs in edit mode, persists, and keeps the active group', async () => {
+    await seedConfig([button('b1', 'One')]);
+    render(<App />);
+    await screen.findByText('Actions');
+    fireEvent.click(screen.getByTitle('New group')); // Group 2
+    fireEvent.click(screen.getByTitle('New group')); // Group 3 — now active
+    fireEvent.click(screen.getByTitle('Edit layout'));
+
+    const tabs = document.querySelectorAll('.dp-tab');
+    fireEvent.dragStart(tabs[0]);   // grab "Actions"
+    fireEvent.dragOver(tabs[2]);    // over "Group 3"
+    fireEvent.drop(tabs[2]);
+
+    await waitFor(async () => {
+      const cfg = await getDeck().getConfig();
+      expect(cfg.groups.map((gr) => gr.name)).toEqual(['Group 2', 'Group 3', 'Actions']);
+      // active group ("Group 3") follows its tab, not the index
+      expect(document.querySelector('.dp-tab.is-active .dp-tab-name')?.textContent).toBe('Group 3');
+    });
+  });
+
+  it('tabs are not draggable outside edit mode', async () => {
+    await seedConfig([]);
+    render(<App />);
+    await screen.findByText('Actions');
+    fireEvent.click(screen.getByTitle('New group')); // need >1 group
+    const tab = document.querySelector('.dp-tab') as HTMLElement;
+    expect(tab.getAttribute('draggable')).toBe('false');
+  });
+
+  it('dropping a tab on itself does not trigger a save', async () => {
+    await seedConfig([]);
+    render(<App />);
+    await screen.findByText('Actions');
+    fireEvent.click(screen.getByTitle('New group'));
+    fireEvent.click(screen.getByTitle('Edit layout'));
+    const tabs = document.querySelectorAll('.dp-tab');
+    const saveSpy = vi.spyOn(getDeck(), 'saveConfig');
+    saveSpy.mockClear();
+    fireEvent.dragStart(tabs[0]);
+    fireEvent.drop(tabs[0]);
+    expect(saveSpy).not.toHaveBeenCalled();
+    saveSpy.mockRestore();
+  });
+
+  it('a tab being renamed drops its edit affordance (no is-edit while renaming)', async () => {
+    await seedConfig([]);
+    render(<App />);
+    await screen.findByText('Actions');
+    fireEvent.click(screen.getByTitle('New group')); // 2 groups
+    fireEvent.click(screen.getByTitle('Edit layout'));
+    // sanity: in edit mode with >1 group the tab advertises the drag affordance
+    expect(document.querySelectorAll('.dp-tab')[0].className).toContain('is-edit');
+    // entering rename mode must drop the affordance (draggable is already off then)
+    fireEvent.doubleClick(document.querySelectorAll('.dp-tab')[0]);
+    expect(document.querySelectorAll('.dp-tab')[0].className).not.toContain('is-edit');
+  });
+});
+
 describe('window chrome', () => {
   it('macOS: bar has is-mac padding class and no close button', async () => {
     render(<App />);

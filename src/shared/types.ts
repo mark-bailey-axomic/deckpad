@@ -60,6 +60,8 @@ export interface RunningSnapshot {
 
 export type PickKind = 'file' | 'app' | 'image';
 
+export type DialogView = 'edit' | 'settings' | 'activity';
+
 export interface DeckApi {
   readonly platform: NodeJS.Platform;
   getConfig(): Promise<Config>;
@@ -72,6 +74,14 @@ export interface DeckApi {
   setAlwaysOnTop(v: boolean): Promise<void>;
   setLoginItem(v: boolean): Promise<void>;
   onActionState(cb: (e: ActionStateEvent) => void): () => void;
+  // dialog windows — payloads/messages are opaque JSON at the IPC boundary
+  openDialog(view: DialogView, payload: unknown): Promise<string>; // returns dialog id
+  getDialogPayload(id: string): Promise<unknown>;
+  sendDialogMessage(id: string, message: unknown): Promise<void>;
+  closeDialog(id: string): Promise<void>;
+  updateDialog(view: DialogView, payload: unknown): Promise<void>; // push fresh data to an open window
+  onDialogMessage(cb: (m: { view: DialogView; message: unknown }) => void): () => void;
+  onDialogUpdate(cb: (payload: unknown) => void): () => void;
 }
 
 // Renderer-side runtime state for one key (never persisted).

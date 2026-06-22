@@ -11,6 +11,14 @@ export default defineConfig({
     plugins: [react()],
     resolve: {
       alias: { '@shared': shared, '@renderer': resolve(__dirname, 'src/renderer/src') }
+    },
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          dialog: resolve(__dirname, 'src/renderer/dialog.html')
+        }
+      }
     }
   }
 });

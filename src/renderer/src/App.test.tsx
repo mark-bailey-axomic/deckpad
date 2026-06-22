@@ -503,6 +503,37 @@ describe('window chrome', () => {
   });
 });
 
+describe('toolbar focus', () => {
+  afterEach(async () => {
+    // Restore settingsInWindow to false so subsequent tests are not affected.
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, settingsInWindow: false };
+    await deck.saveConfig(cfg);
+  });
+
+  it('settings button blurs itself after opening dialog window', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    // Enable settingsInWindow so the window path is taken
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, settingsInWindow: true };
+    await deck.saveConfig(cfg);
+
+    render(<App />);
+    await screen.findByText('DeckPad');
+
+    const settingsBtn = screen.getByTitle('Settings');
+    settingsBtn.focus();
+    expect(document.activeElement).toBe(settingsBtn);
+
+    const blurSpy = vi.spyOn(settingsBtn, 'blur');
+    fireEvent.click(settingsBtn);
+
+    expect(blurSpy).toHaveBeenCalledTimes(1);
+    blurSpy.mockRestore();
+  });
+});
+
 describe('settings wiring', () => {
   beforeEach(async () => {
     await seedConfig([]);

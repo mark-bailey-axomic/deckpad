@@ -311,7 +311,9 @@ export function App(): ReactElement | null {
           <button className="dp-pill" onClick={(e) => {
             e.stopPropagation();
             if (config.settings.activityInWindow) {
+              const btn = e.currentTarget;
               void deck.openDialog('activity', { items: panelItems, now, accent, surface: config.settings.surface });
+              btn.blur();
             } else setPanelOpen((o) => !o);
           }}>
             <span className="dp-pill-dot" style={{ background: accent }} />
@@ -344,7 +346,9 @@ export function App(): ReactElement | null {
           <button className={'dp-icon-btn' + (settingsOpen ? ' is-active' : '')} onClick={(e) => {
             e.stopPropagation();
             if (config.settings.settingsInWindow) {
+              const btn = e.currentTarget;
               void deck.openDialog('settings', { settings: settingsValues, accent, surface: config.settings.surface });
+              btn.blur();
             } else setSettingsOpen((o) => !o);
           }} title="Settings">
             <DeckIcon name="gear" size={18} />

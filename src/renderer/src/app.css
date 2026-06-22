@@ -59,6 +59,12 @@ html, body, #root { height: 100%; margin: 0; }
   -webkit-app-region: no-drag;
 }
 
+/* Activity panel list fills all remaining height inside the panel window. */
+.dp-dialog-window .dp-panel-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
 /* Win/Linux slim close button at bar-right. */
 .dp-close-btn {
   -webkit-app-region: no-drag;

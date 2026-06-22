@@ -3,6 +3,7 @@ import type { Button, DeckApi, DialogView, Surface } from '@shared/types';
 import { SURFACES, GLOW, RADIUS } from '@shared/constants';
 import { EditModal } from '../components/EditModal';
 import { Settings } from '../components/Settings';
+import type { SettingsValues } from '../components/Settings';
 import { ActivityPanel } from '../components/ActivityPanel';
 import type { EditPayload, SettingsPayload, ActivityPayload, DialogMessage } from './messages';
 
@@ -14,6 +15,7 @@ interface Props {
 
 export function DialogHost({ view, id, deck }: Props): ReactElement | null {
   const [payload, setPayload] = useState<unknown>(undefined);
+  const [settingsDraft, setSettingsDraft] = useState<SettingsValues | null>(null);
 
   useEffect(() => { void deck.getDialogPayload(id).then(setPayload); }, [deck, id]);
 
@@ -39,8 +41,18 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
     '--glow': String(GLOW), '--radius': `${RADIUS}px`
   } as React.CSSProperties;
 
+  // Settings view: derive style from live draft so accent/surface updates reflect instantly.
+  const base = view === 'settings' ? (payload as SettingsPayload).settings : null;
+  const effectiveSettings = (base !== null ? (settingsDraft ?? base) : null)!;
+  const settingsSurf = base !== null ? (SURFACES[effectiveSettings.surface] ?? SURFACES['near-black']) : null;
+  const settingsStyle = base !== null ? {
+    width: '100%', height: '100%', background: settingsSurf!.bg,
+    '--accent': effectiveSettings.accent, '--key': settingsSurf!.key, '--key-hi': settingsSurf!.keyHi,
+    '--glow': String(GLOW), '--radius': `${RADIUS}px`
+  } as React.CSSProperties : null;
+
   return (
-    <div className="dp-dialog-window" style={style}>
+    <div className="dp-dialog-window" style={view === 'settings' ? settingsStyle! : style}>
       {view === 'edit' && (
         <EditModal
           open
@@ -56,8 +68,11 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
       {view === 'settings' && (
         <Settings
           open
-          settings={(payload as SettingsPayload).settings}
-          onChange={(patch) => send({ type: 'settings-change', patch })}
+          settings={effectiveSettings}
+          onChange={(patch) => {
+            setSettingsDraft(prev => ({ ...(prev ?? base!), ...patch }));
+            send({ type: 'settings-change', patch });
+          }}
           onClose={close}
         />
       )}

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import type { DeckApi } from '@shared/types';
 import { DialogHost } from './DialogHost';
-import type { EditPayload, ActivityPayload } from './messages';
+import type { EditPayload, ActivityPayload, SettingsPayload } from './messages';
 import type { ActivityItem } from '../components/ActivityPanel';
 
 function mockDeck(payload: unknown): DeckApi {
@@ -76,6 +76,42 @@ describe('DialogHost', () => {
       expect(deck.sendDialogMessage).toHaveBeenCalledWith('id-1', expect.objectContaining({ type: 'save', index: 3 }));
       expect(deck.closeDialog).toHaveBeenCalledWith('id-1');
     });
+  });
+
+  it('settings view re-renders and sends patch when a toggle is clicked', async () => {
+    const settingsPayload: SettingsPayload = {
+      settings: {
+        cols: 4, rows: 3, accent: '#34D399', surface: 'near-black',
+        showLabels: false, launchStartup: false, alwaysOnTop: false,
+        settingsInWindow: false, activityInWindow: false,
+      },
+      accent: '#34D399',
+      surface: 'near-black',
+    };
+    const deck = mockDeck(settingsPayload);
+    render(<DialogHost view="settings" id="id-s" deck={deck} />);
+
+    // Wait for the Settings component to appear
+    await waitFor(() => expect(screen.getByText('Show labels')).toBeInTheDocument());
+
+    // ToggleRow renders as a <button> with the label as text.
+    // The switch span carries 'is-on' class when value=true; initially showLabels=false.
+    const toggleBtn = screen.getByRole('button', { name: /show labels/i });
+    expect(toggleBtn.querySelector('.dp-switch')).not.toHaveClass('is-on');
+
+    // Click → should toggle to true
+    fireEvent.click(toggleBtn);
+
+    // (a) sendDialogMessage called with settings-change patch
+    await waitFor(() => {
+      expect(deck.sendDialogMessage).toHaveBeenCalledWith('id-s', {
+        type: 'settings-change',
+        patch: { showLabels: true },
+      });
+    });
+
+    // (b) the switch now reflects toggled value (window re-rendered)
+    expect(toggleBtn.querySelector('.dp-switch')).toHaveClass('is-on');
   });
 
   it('activity view re-renders live when onDialogUpdate fires', async () => {

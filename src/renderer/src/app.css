@@ -20,6 +20,45 @@ html, body, #root { height: 100%; margin: 0; }
 /* macOS hiddenInset: traffic lights overlay the bar — pad the brand clear of them. */
 .dp-bar.is-mac { padding-left: 78px; }
 
+/* ---- dialog window: fill host window, no drawer chrome ---- */
+.dp-dialog-window {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Reset sheet + panel to fill the window (override drawer position/transform/chrome).
+   Include .is-open variants because deckpad.css uses those to set transform/visibility. */
+.dp-dialog-window .dp-sheet,
+.dp-dialog-window .dp-sheet.is-open,
+.dp-dialog-window .dp-panel,
+.dp-dialog-window .dp-panel.is-open {
+  position: static;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  flex: 1 1 auto;
+  transform: none;
+  visibility: visible;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  background: transparent;
+}
+
+/* Frameless window: header is drag region; buttons inside opt out. */
+.dp-dialog-window .dp-sheet-head,
+.dp-dialog-window .dp-panel-head {
+  -webkit-app-region: drag;
+}
+
+.dp-dialog-window .dp-sheet-head button,
+.dp-dialog-window .dp-panel-head button {
+  -webkit-app-region: no-drag;
+}
+
 /* Win/Linux slim close button at bar-right. */
 .dp-close-btn {
   -webkit-app-region: no-drag;

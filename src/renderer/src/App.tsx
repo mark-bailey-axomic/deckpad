@@ -437,7 +437,14 @@ export function App(): ReactElement | null {
       )}
 
       <div className="dp-toast-layer">
-        <Toast toast={toast} onView={() => { setPanelOpen(true); setToast(null); }} onClose={() => setToast(null)} />
+        <Toast toast={toast} onView={() => {
+          if (config?.settings.activityInWindow) {
+            void deck.openDialog('activity', { items: panelItems, now, accent, surface: config.settings.surface });
+          } else {
+            setPanelOpen(true);
+          }
+          setToast(null);
+        }} onClose={() => setToast(null)} />
       </div>
 
       <ContextMenu menu={menu} onEdit={ctxEdit} onDuplicate={ctxDuplicate} onDelete={ctxDelete} />

@@ -52,14 +52,17 @@ render existing component → relay events/results back over IPC.
 
 New preload bridge methods (added to `window.deck`):
 
-- `openDialog({ view, payload }) -> id` — main creates the window (type per the
+- `openDialog(view, payload): Promise<string>` — main creates the window (type per the
   table above), stashes `payload` keyed by a generated `id` token, loads
   `dialog.html?view=<view>&id=<id>`.
-- `getDialogPayload(id) -> payload` — called by the dialog renderer on mount.
-- `resolveDialog(id, result)` — terminal result; main applies it then closes the
-  window. Used by EditModal: `{ type: 'save', button }` or `{ type: 'cancel' }`.
-- `dialogEvent(id, event)` — non-terminal events while the window is open.
-  Used by Settings (`{ patch }`, live-applied) and ActivityPanel (`{ stop: buttonId }`).
+- `getDialogPayload(id): Promise<unknown>` — called by the dialog renderer on mount.
+- `sendDialogMessage(id, message): Promise<void>` — sends a message from the dialog to
+  main (forwarded to the main window as `IPC.dialogMessage` `{ view, message }`).
+  Used for all actions: save, cancel, settings-change, activity-stop.
+- `closeDialog(id): Promise<void>` — terminal actions (save/cancel) call this after
+  `sendDialogMessage` to close the window.
+- `updateDialog(view, payload): Promise<void>` — main pushes payload updates to an
+  open dialog window.
 
 Main forwards `patch`/`stop`/`save` to the main window (via an event) or to the
 existing config/action logic, reusing the current handlers (`commit`,
@@ -69,12 +72,14 @@ in-window sheet does today (`onChange(patch)`), rather than batching on close.
 ### Opening flow
 
 1. App.tsx, where it currently sets local state to open a dialog, instead calls
-   `deck.openDialog({ view, payload })`.
+   `deck.openDialog(view, payload)`.
    - edit payload: `{ draft, index, accent, surface }`
    - settings payload: `{ settings, accent, surface }`
    - activity payload: `{ items, now, accent, surface }`
 2. Dialog window mounts → `getDialogPayload(id)` → renders the component.
-3. Component callbacks map to `resolveDialog`/`dialogEvent`.
+3. Terminal actions (save/cancel) call `sendDialogMessage(id, message)` then
+   `closeDialog(id)`; non-terminal actions (settings-change, activity-stop) call
+   `sendDialogMessage(id, message)` only.
 
 ### Live updates into windows
 
@@ -83,8 +88,9 @@ emit to **broadcast** to every tracked window's `webContents` so an independent
 ActivityPanel window stays live. The existing `deck.onActionState()` bridge works
 per-window unchanged, so the Activity window subscribes the same way.
 
-Theme changes (accent/surface) are pushed to open windows over the same
-broadcast/`dialogEvent` path so frameless windows restyle live.
+Theme/data updates are pushed to open windows via `updateDialog(view, payload)` →
+`IPC.dialogUpdate` → `onDialogUpdate(cb)` in the dialog renderer, so frameless windows
+restyle live.
 
 ### File picker
 

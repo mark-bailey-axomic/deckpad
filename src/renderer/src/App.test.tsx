@@ -192,6 +192,65 @@ describe('App — save failure surfaces a toast', () => {
   });
 });
 
+describe('Toast — View log with activityInWindow', () => {
+  let onActionStateSpy: MockInstance<DeckApi['onActionState']>;
+  let openDialogSpy: MockInstance<DeckApi['openDialog']>;
+
+  beforeEach(async () => {
+    await seedConfig([button('btn1', 'MyAction')]);
+    // Enable activityInWindow so the window path is taken
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, activityInWindow: true };
+    await deck.saveConfig(cfg);
+  });
+
+  afterEach(async () => {
+    onActionStateSpy?.mockRestore();
+    openDialogSpy?.mockRestore();
+    // Restore activityInWindow to false so subsequent tests are not affected
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, activityInWindow: false };
+    await deck.saveConfig(cfg);
+  });
+
+  it('clicking View log opens the activity dialog window when activityInWindow is on', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    openDialogSpy = vi.spyOn(deck, 'openDialog');
+
+    // Intercept onActionState to capture the listener so we can emit a fake failure
+    let stateListener: ((e: import('@shared/types').ActionStateEvent) => void) | null = null;
+    onActionStateSpy = vi.spyOn(deck, 'onActionState').mockImplementation((cb) => {
+      stateListener = cb;
+      return () => { stateListener = null; };
+    });
+
+    render(<App />);
+    await screen.findByText('MyAction');
+
+    // Emit a failed exit event to produce a kind:'fail' toast with a "View log" button
+    await waitFor(() => expect(stateListener).not.toBeNull());
+    stateListener!({ type: 'exited', buttonId: 'btn1', code: 1, ranFor: 500 });
+
+    // Wait for the toast to appear
+    await screen.findByText('View log');
+
+    // Click "View log" on the toast
+    fireEvent.click(screen.getByText('View log'));
+
+    // Should have called openDialog with 'activity' payload
+    expect(openDialogSpy).toHaveBeenCalledWith('activity', expect.objectContaining({
+      items: expect.any(Array),
+      accent: expect.any(String),
+      surface: expect.any(String),
+    }));
+
+    // The inline activity panel must NOT be open
+    expect(document.querySelector('.dp-panel')).toBeNull();
+  });
+});
+
 describe('App — deleting a running button stops it and clears the pill', () => {
   let stopActionSpy: MockInstance<DeckApi['stopAction']>;
 

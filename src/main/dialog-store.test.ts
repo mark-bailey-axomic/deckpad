@@ -49,4 +49,11 @@ describe('DialogStore', () => {
     s.open('activity', win('a'), {});
     expect(s.allWindows()).toHaveLength(2);
   });
+
+  it('idForView returns the id from the matching open()', () => {
+    const s = store();
+    const id = s.open('edit', win('a'), {});
+    expect(s.idForView('edit')).toBe(id);
+    expect(s.idForView('settings')).toBeUndefined();
+  });
 });

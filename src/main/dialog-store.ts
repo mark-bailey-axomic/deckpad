@@ -54,6 +54,10 @@ export class DialogStore {
     return rec.win;
   }
 
+  idForView(view: DialogView): string | undefined {
+    return this.byView.get(view)?.id;
+  }
+
   allWindows(): WinHandle[] {
     return [...this.byView.values()].map((r) => r.win);
   }

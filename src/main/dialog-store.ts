@@ -40,6 +40,7 @@ export class DialogStore {
     return this.byId.get(id)?.view;
   }
 
+  /** Updates the payload for the given view. No-op if no window is currently open for this view (intentional). */
   setPayloadForView(view: DialogView, payload: unknown): void {
     const rec = this.byView.get(view);
     if (rec) rec.payload = payload;

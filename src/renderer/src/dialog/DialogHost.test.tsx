@@ -138,6 +138,24 @@ describe('DialogHost', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 
+  it('sendDialogMessage rejection routes to "Dialog unavailable." and does not produce unhandled rejection', async () => {
+    const deck = mockDeck(editPayload);
+    (deck.sendDialogMessage as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('ipc error'));
+
+    const unhandledHandler = vi.fn();
+    window.addEventListener('unhandledrejection', unhandledHandler);
+
+    render(<DialogHost view="edit" id="id-ipc" deck={deck} />);
+    await waitFor(() => screen.getByDisplayValue('Hello'));
+
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    expect(await screen.findByText(/dialog unavailable/i)).toBeInTheDocument();
+    expect(unhandledHandler).not.toHaveBeenCalled();
+
+    window.removeEventListener('unhandledrejection', unhandledHandler);
+  });
+
   it('activity view re-renders live when onDialogUpdate fires', async () => {
     const { deck, fireUpdate } = mockDeckWithUpdateCapture(emptyActivityPayload);
     render(<DialogHost view="activity" id="id-a" deck={deck} />);

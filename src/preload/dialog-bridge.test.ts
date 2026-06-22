@@ -48,4 +48,15 @@ describe('preload dialog bridge', () => {
     off();
     expect(listeners.has(IPC.dialogMessage)).toBe(false);
   });
+
+  it('onDialogUpdate subscribes and unsubscribes', async () => {
+    await import('./index');
+    const deck = exposed.deck as DeckApi;
+    const cb = vi.fn();
+    const off = deck.onDialogUpdate(cb);
+    listeners.get(IPC.dialogUpdate)!({}, { items: [] });
+    expect(cb).toHaveBeenCalledWith({ items: [] });
+    off();
+    expect(listeners.has(IPC.dialogUpdate)).toBe(false);
+  });
 });

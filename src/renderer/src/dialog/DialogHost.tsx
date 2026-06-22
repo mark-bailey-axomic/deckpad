@@ -16,14 +16,21 @@ interface Props {
 export function DialogHost({ view, id, deck }: Props): ReactElement | null {
   const [payload, setPayload] = useState<unknown>(undefined);
   const [settingsDraft, setSettingsDraft] = useState<SettingsValues | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => { void deck.getDialogPayload(id).then(setPayload); }, [deck, id]);
+  useEffect(() => {
+    deck.getDialogPayload(id)
+      .then((p) => { if (p == null) setFailed(true); else setPayload(p); })
+      .catch(() => setFailed(true));
+  }, [deck, id]);
 
   // Activity is independent + live: re-render when main window pushes fresh data.
   useEffect(() => {
     if (view !== 'activity') return;
-    return deck.onDialogUpdate((p) => setPayload(p));
+    return deck.onDialogUpdate((p) => { if (p != null) setPayload(p); });
   }, [deck, view]);
+
+  if (failed) return <div className="dp-dialog-window" style={{ padding: 16 }}>Dialog unavailable.</div>;
 
   if (payload === undefined) return null;
 

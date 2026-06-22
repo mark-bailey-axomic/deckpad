@@ -114,6 +114,27 @@ describe('DialogHost', () => {
     expect(toggleBtn.querySelector('.dp-switch')).toHaveClass('is-on');
   });
 
+  it('null payload renders "Dialog unavailable." fallback without throwing', async () => {
+    const deck = mockDeck(null);
+    render(<DialogHost view="edit" id="id-null" deck={deck} />);
+    expect(await screen.findByText(/dialog unavailable/i)).toBeInTheDocument();
+    // Must not render any edit/settings/activity child
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('rejected getDialogPayload renders "Dialog unavailable." fallback', async () => {
+    const deck: DeckApi = {
+      openDialog: vi.fn(), getDialogPayload: vi.fn(async () => { throw new Error('boom'); }),
+      sendDialogMessage: vi.fn(async () => undefined), closeDialog: vi.fn(async () => undefined),
+      updateDialog: vi.fn(), onDialogMessage: () => () => undefined,
+      onDialogUpdate: () => () => undefined,
+      pickFile: vi.fn(async () => null), extractIcon: vi.fn(async () => null)
+    } as unknown as DeckApi;
+    render(<DialogHost view="edit" id="id-err" deck={deck} />);
+    expect(await screen.findByText(/dialog unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
   it('activity view re-renders live when onDialogUpdate fires', async () => {
     const { deck, fireUpdate } = mockDeckWithUpdateCapture(emptyActivityPayload);
     render(<DialogHost view="activity" id="id-a" deck={deck} />);

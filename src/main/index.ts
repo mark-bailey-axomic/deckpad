@@ -135,7 +135,7 @@ function createDialogWindow(view: DialogView, payload: unknown): string {
   const existing = dialogs.windowForView(view) as BrowserWindow | undefined;
   if (existing && !existing.isDestroyed()) {
     dialogs.setPayloadForView(view, payload);
-    existing.webContents.send(IPC.dialogUpdate, payload);
+    if (!existing.webContents.isDestroyed()) existing.webContents.send(IPC.dialogUpdate, payload);
     existing.focus();
     return dialogs.idForView(view)!;
   }
@@ -205,7 +205,7 @@ void app.whenReady().then(() => {
     updateDialog: (view, payload) => {
       dialogs.setPayloadForView(view, payload);
       const win = dialogs.windowForView(view) as BrowserWindow | undefined;
-      if (win && !win.isDestroyed()) win.webContents.send(IPC.dialogUpdate, payload);
+      if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send(IPC.dialogUpdate, payload);
     }
   });
   mainWindow = createWindow(lastConfig.grid);

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { StrictMode } from 'react';
 import { App } from './App';
 import { getDeck } from './lib/deck';
-import type { Button, DeckApi } from '@shared/types';
+import type { Button, DeckApi, DialogView } from '@shared/types';
 
 vi.mock('./lib/deck', async () => {
   const { createMockDeck } = await import('./lib/deck-mock');
@@ -43,25 +43,35 @@ describe('App shell', () => {
     expect(screen.getByText('4×3')).toBeInTheDocument();
   });
 
-  it('clicking an empty slot opens the Add action modal; Esc closes it without confirmation', async () => {
+  it('opening the editor calls deck.openDialog instead of rendering an inline modal', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const openDialogSpy = vi.spyOn(deck, 'openDialog');
     render(<App />);
     await screen.findByText('Dev Server');
     fireEvent.click(document.querySelectorAll('.dp-key--empty')[0]);
-    expect(screen.getByText('Add action')).toBeInTheDocument();
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByText('Add action')).toBeNull();
+    await waitFor(() => expect(openDialogSpy).toHaveBeenCalledWith('edit', expect.objectContaining({ index: expect.any(Number), draft: expect.any(Object), accent: expect.any(String) })));
+    // No inline dialog node should be rendered
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    openDialogSpy.mockRestore();
   });
 
-  it('saving a new action persists it via deck.saveConfig', async () => {
+  it('saving a new action persists it via a dialog save message', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    // Capture the onDialogMessage callback so we can simulate a save from the dialog window
+    let dialogCb: ((m: { view: DialogView; message: unknown }) => void) | null = null;
+    const onDialogMessageSpy = vi.spyOn(deck, 'onDialogMessage').mockImplementation((cb) => {
+      dialogCb = cb;
+      return () => undefined;
+    });
     render(<App />);
     await screen.findByText('Dev Server');
-    fireEvent.click(document.querySelectorAll('.dp-key--empty')[0]);
-    fireEvent.change(screen.getByPlaceholderText('e.g. Dev Server'), { target: { value: 'Deploy' } });
-    fireEvent.change(screen.getByPlaceholderText('npm run dev'), { target: { value: './deploy.sh' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save action' }));
+    // Simulate the dialog window sending a save message
+    const newButton = { id: crypto.randomUUID(), label: 'Deploy', type: 'command' as const, command: './deploy.sh', icon: { kind: 'auto' as const } };
+    dialogCb!({ view: 'edit', message: { type: 'save', button: newButton, index: 1 } });
     await screen.findByText('Deploy');
-    const persisted = await getDeck().getConfig();
+    const persisted = await deck.getConfig();
     expect(persisted.groups[0].slots.filter(Boolean).map((b) => b!.label)).toContain('Deploy');
+    onDialogMessageSpy.mockRestore();
   });
 
   it('right-click on a filled key opens the context menu with Edit/Duplicate/Delete', async () => {

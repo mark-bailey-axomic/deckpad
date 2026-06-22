@@ -11,7 +11,9 @@ function mockDefaultConfig(): Config {
       surface: 'near-black',
       showLabels: true,
       launchStartup: false,
-      alwaysOnTop: false
+      alwaysOnTop: false,
+      settingsInWindow: false,
+      activityInWindow: false
     },
     groups: [{ id: 'mock-group', name: 'Actions', slots: Array(cols * rows).fill(null) }]
   };

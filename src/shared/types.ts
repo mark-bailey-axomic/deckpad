@@ -11,6 +11,8 @@ export interface Settings {
   showLabels: boolean;
   launchStartup: boolean;
   alwaysOnTop: boolean;
+  settingsInWindow: boolean;
+  activityInWindow: boolean;
 }
 
 export type ButtonType = 'command' | 'file' | 'app';

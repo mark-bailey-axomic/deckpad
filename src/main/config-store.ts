@@ -15,7 +15,9 @@ export function defaultConfig(): Config {
       surface: 'near-black',
       showLabels: true,
       launchStartup: false,
-      alwaysOnTop: false
+      alwaysOnTop: false,
+      settingsInWindow: false,
+      activityInWindow: false
     },
     groups: [{ id: randomUUID(), name: 'Actions', slots: Array(cols * rows).fill(null) }]
   };

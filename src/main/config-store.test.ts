@@ -26,7 +26,8 @@ describe('defaultConfig', () => {
     expect(cfg.grid).toEqual({ cols: 4, rows: 3 });
     expect(cfg.settings).toEqual({
       accent: '#34D399', surface: 'near-black',
-      showLabels: true, launchStartup: false, alwaysOnTop: false
+      showLabels: true, launchStartup: false, alwaysOnTop: false,
+      settingsInWindow: false, activityInWindow: false
     });
     expect(cfg.groups).toHaveLength(1);
     expect(cfg.groups[0].name).toBe('Actions');

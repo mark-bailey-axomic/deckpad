@@ -409,4 +409,39 @@ describe('validateConfig', () => {
     };
     expect(validateConfig(cfg)).toBe(true);
   });
+
+  // ---------------------------------------------------------------------------
+  // Task 9: back-compat for settingsInWindow / activityInWindow
+  // ---------------------------------------------------------------------------
+
+  it('accepts a config omitting settingsInWindow (back-compat: missing treated as false)', () => {
+    const cfg = defaultConfig() as any;
+    delete cfg.settings.settingsInWindow;
+    expect(validateConfig(cfg)).toBe(true);
+  });
+
+  it('accepts a config omitting activityInWindow (back-compat: missing treated as false)', () => {
+    const cfg = defaultConfig() as any;
+    delete cfg.settings.activityInWindow;
+    expect(validateConfig(cfg)).toBe(true);
+  });
+
+  it('rejects settingsInWindow as a non-boolean when present', () => {
+    const cfg = defaultConfig() as any;
+    cfg.settings.settingsInWindow = 'yes';
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('rejects activityInWindow as a non-boolean when present', () => {
+    const cfg = defaultConfig() as any;
+    cfg.settings.activityInWindow = 1;
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('accepts settingsInWindow and activityInWindow as booleans', () => {
+    const cfg = defaultConfig() as any;
+    cfg.settings.settingsInWindow = true;
+    cfg.settings.activityInWindow = false;
+    expect(validateConfig(cfg)).toBe(true);
+  });
 });

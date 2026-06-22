@@ -4,7 +4,8 @@ import { Settings } from './Settings';
 
 const settings = {
   cols: 4, rows: 3, accent: '#34D399', surface: 'near-black' as const,
-  showLabels: true, launchStartup: false, alwaysOnTop: false
+  showLabels: true, launchStartup: false, alwaysOnTop: false,
+  settingsInWindow: false, activityInWindow: false
 };
 
 describe('Settings sheet', () => {

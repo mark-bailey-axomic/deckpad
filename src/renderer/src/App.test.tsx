@@ -65,6 +65,8 @@ describe('App shell', () => {
     });
     render(<App />);
     await screen.findByText('Dev Server');
+    // Wait for the useEffect to subscribe before firing the callback
+    await waitFor(() => expect(dialogCb).not.toBeNull());
     // Simulate the dialog window sending a save message
     const newButton = { id: crypto.randomUUID(), label: 'Deploy', type: 'command' as const, command: './deploy.sh', icon: { kind: 'auto' as const } };
     dialogCb!({ view: 'edit', message: { type: 'save', button: newButton, index: 1 } });

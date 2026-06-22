@@ -15,7 +15,12 @@ vi.mock('electron', () => ({
 import { IPC } from '@shared/constants';
 import type { DeckApi } from '@shared/types';
 
-beforeEach(() => { invoke.mockClear(); });
+beforeEach(() => {
+  vi.resetModules();
+  invoke.mockClear();
+  listeners.clear();
+  for (const k of Object.keys(exposed)) delete exposed[k];
+});
 
 describe('preload dialog bridge', () => {
   it('maps dialog methods to channels', async () => {

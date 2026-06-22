@@ -67,6 +67,13 @@ export function createMockDeck(): DeckApi & { __reset(): void } {
       listeners.add(cb);
       return () => listeners.delete(cb);
     },
+    openDialog: async () => 'mock-dialog',
+    getDialogPayload: async () => null,
+    sendDialogMessage: async () => undefined,
+    closeDialog: async () => undefined,
+    updateDialog: async () => undefined,
+    onDialogMessage: () => () => undefined,
+    onDialogUpdate: () => () => undefined,
     /** Test helper: cancel all pending timers and clear the running map. */
     __reset() {
       for (const { exitTimer } of running.values()) clearTimeout(exitTimer);

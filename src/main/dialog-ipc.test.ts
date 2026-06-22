@@ -66,4 +66,10 @@ describe('registerDialogIpc', () => {
     expect(d.updateDialog).toHaveBeenCalledWith('activity', { items: [] });
     await expect(call(IPC.updateDialog, 'nope', {})).rejects.toThrow('invalid dialog view');
   });
+
+  it('rejects an invalid dialog id', async () => {
+    registerDialogIpc(deps());
+    await expect(call(IPC.getDialogPayload, '')).rejects.toThrow('invalid dialog id');
+    await expect(call(IPC.closeDialog, 123)).rejects.toThrow('invalid dialog id');
+  });
 });

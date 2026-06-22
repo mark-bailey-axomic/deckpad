@@ -18,7 +18,10 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
   useEffect(() => { void deck.getDialogPayload(id).then(setPayload); }, [deck, id]);
 
   // Activity is independent + live: re-render when main window pushes fresh data.
-  useEffect(() => deck.onDialogUpdate((p) => setPayload(p)), [deck]);
+  useEffect(() => {
+    if (view !== 'activity') return;
+    return deck.onDialogUpdate((p) => setPayload(p));
+  }, [deck, view]);
 
   if (payload === undefined) return null;
 
@@ -38,46 +41,37 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
 
   return (
     <div className="dp-dialog-window" style={style}>
-      {view === 'edit' && (() => {
-        const p = payload as EditPayload;
-        return (
-          <EditModal
-            open
-            draft={p.draft}
-            accent={accent}
-            onSave={(button: Button) => sendThenClose({ type: 'save', button, index: p.index })}
-            onCancel={close}
-            pickFile={(kind) => deck.pickFile(kind)}
-            extractIcon={(path, buttonId) => deck.extractIcon(path, buttonId)}
-          />
-        );
-      })()}
+      {view === 'edit' && (
+        <EditModal
+          open
+          draft={(payload as EditPayload).draft}
+          accent={accent}
+          onSave={(button: Button) => sendThenClose({ type: 'save', button, index: (payload as EditPayload).index })}
+          onCancel={close}
+          pickFile={(kind) => deck.pickFile(kind)}
+          extractIcon={(path, buttonId) => deck.extractIcon(path, buttonId)}
+        />
+      )}
 
-      {view === 'settings' && (() => {
-        const p = payload as SettingsPayload;
-        return (
-          <Settings
-            open
-            settings={p.settings}
-            onChange={(patch) => send({ type: 'settings-change', patch })}
-            onClose={close}
-          />
-        );
-      })()}
+      {view === 'settings' && (
+        <Settings
+          open
+          settings={(payload as SettingsPayload).settings}
+          onChange={(patch) => send({ type: 'settings-change', patch })}
+          onClose={close}
+        />
+      )}
 
-      {view === 'activity' && (() => {
-        const p = payload as ActivityPayload;
-        return (
-          <ActivityPanel
-            open
-            items={p.items}
-            now={p.now}
-            accent={accent}
-            onStop={(buttonId) => send({ type: 'activity-stop', buttonId })}
-            onClose={close}
-          />
-        );
-      })()}
+      {view === 'activity' && (
+        <ActivityPanel
+          open
+          items={(payload as ActivityPayload).items}
+          now={(payload as ActivityPayload).now}
+          accent={accent}
+          onStop={(buttonId) => send({ type: 'activity-stop', buttonId })}
+          onClose={close}
+        />
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import type { DeckApi } from '@shared/types';
 import { DialogHost } from './DialogHost';
@@ -25,6 +25,14 @@ describe('DialogHost', () => {
     render(<DialogHost view="edit" id="id-1" deck={deck} />);
     expect(deck.getDialogPayload).toHaveBeenCalledWith('id-1');
     await waitFor(() => expect(screen.getByDisplayValue('Hello')).toBeInTheDocument());
+  });
+
+  it('renders nothing for an unknown view', async () => {
+    const deck = mockDeck({ accent: '#000000', surface: 'near-black' });
+    render(<DialogHost view={'unknown' as unknown as import('@shared/types').DialogView} id="id-x" deck={deck} />);
+    await waitFor(() => expect(deck.getDialogPayload).toHaveBeenCalledWith('id-x'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByDisplayValue('Hello')).toBeNull();
   });
 
   it('save sends a save message then asks to close', async () => {

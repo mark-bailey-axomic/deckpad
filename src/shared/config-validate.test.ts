@@ -414,16 +414,16 @@ describe('validateConfig', () => {
   // Task 9: back-compat for settingsInWindow / activityInWindow
   // ---------------------------------------------------------------------------
 
-  it('accepts a config omitting settingsInWindow (back-compat: missing treated as false)', () => {
+  it('rejects a config omitting settingsInWindow (normalization happens in loader, not validator)', () => {
     const cfg = defaultConfig() as any;
     delete cfg.settings.settingsInWindow;
-    expect(validateConfig(cfg)).toBe(true);
+    expect(validateConfig(cfg)).toBe(false);
   });
 
-  it('accepts a config omitting activityInWindow (back-compat: missing treated as false)', () => {
+  it('rejects a config omitting activityInWindow (normalization happens in loader, not validator)', () => {
     const cfg = defaultConfig() as any;
     delete cfg.settings.activityInWindow;
-    expect(validateConfig(cfg)).toBe(true);
+    expect(validateConfig(cfg)).toBe(false);
   });
 
   it('rejects settingsInWindow as a non-boolean when present', () => {

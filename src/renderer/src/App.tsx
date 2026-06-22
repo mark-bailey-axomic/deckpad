@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { BAR_H, GLOW, GRID_LIMITS, KEY_SIZE, GAP, PAD, RADIUS, SURFACES, TABS_H } from '@shared/constants';
 import { indexOfId, insertShiftReorder, resizeGroups } from '@shared/layout';
-import type { Button, Config, Group } from '@shared/types';
+import type { Button, Config, DialogView, Group } from '@shared/types';
 import { getDeck } from './lib/deck';
 import { useActionStates, type FailInfo } from './hooks/useActionStates';
 import { useNowTick } from './hooks/useNowTick';
@@ -91,7 +91,7 @@ export function App(): ReactElement | null {
   }, []);
 
   // Stable ref to dialog message handler — populated after config loads.
-  const dialogMessageHandlerRef = useRef<(m: { view: string; message: unknown }) => void>(() => undefined);
+  const dialogMessageHandlerRef = useRef<(m: { view: DialogView; message: unknown }) => void>(() => undefined);
 
   // Subscribe to messages from dialog windows and apply them through existing paths.
   // deck is stable; the actual handler is swapped via ref so the effect runs once.

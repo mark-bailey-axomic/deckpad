@@ -76,6 +76,9 @@ describe('DialogHost', () => {
       expect(deck.sendDialogMessage).toHaveBeenCalledWith('id-1', expect.objectContaining({ type: 'save', index: 3 }));
       expect(deck.closeDialog).toHaveBeenCalledWith('id-1');
     });
+    // sendDialogMessage must have been invoked BEFORE closeDialog
+    expect((deck.sendDialogMessage as any).mock.invocationCallOrder[0])
+      .toBeLessThan((deck.closeDialog as any).mock.invocationCallOrder[0]);
   });
 
   it('settings view re-renders and sends patch when a toggle is clicked', async () => {

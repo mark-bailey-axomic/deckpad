@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactElement } from 'react';
-import type { Button, DeckApi, DialogView, Surface } from '@shared/types';
+import type { DeckApi, DialogView, Surface } from '@shared/types';
 import { SURFACES, GLOW, RADIUS } from '@shared/constants';
 import { EditModal } from '../components/EditModal';
 import { Settings } from '../components/Settings';
@@ -36,7 +36,10 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
 
   const send = (message: DialogMessage) => void deck.sendDialogMessage(id, message);
   const close = () => void deck.closeDialog(id);
-  const sendThenClose = (message: DialogMessage) => { send(message); close(); };
+  const sendThenClose = async (message: DialogMessage) => {
+    await deck.sendDialogMessage(id, message);
+    await deck.closeDialog(id);
+  };
 
   const accent = (payload as { accent: string }).accent;
   const surface = (payload as { surface: Surface }).surface;
@@ -65,7 +68,7 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
           open
           draft={(payload as EditPayload).draft}
           accent={accent}
-          onSave={(button: Button) => sendThenClose({ type: 'save', button, index: (payload as EditPayload).index })}
+          onSave={(button) => { void sendThenClose({ type: 'save', button, index: (payload as EditPayload).index }); }}
           onCancel={close}
           pickFile={(kind) => deck.pickFile(kind)}
           extractIcon={(path, buttonId) => deck.extractIcon(path, buttonId)}

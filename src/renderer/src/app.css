@@ -70,6 +70,7 @@ html, body, #root { height: 100%; margin: 0; }
   position: static;
   inset: auto;
   flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: transparent;
@@ -83,15 +84,18 @@ html, body, #root { height: 100%; margin: 0; }
   height: 100%;
   max-height: none;
   flex: 1 1 auto;
+  min-height: 0;
   border: 0;
   border-radius: 0;
   box-shadow: none;
   animation: none;
 }
 
-/* Body grows so the foot (Save/Cancel) pins to the bottom of the window. */
+/* Body grows to fill, but min-height:0 lets it shrink so its overflow-y:auto scrolls
+   (flex items default to min-height:auto, which would otherwise overflow the window). */
 .dp-dialog-window .dp-modal-body {
   flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Frameless window: modal header is the drag region; its buttons opt out. */

@@ -36,7 +36,14 @@ export class ConfigStore {
       const parsed: unknown = JSON.parse(readFileSync(this.file, 'utf8'));
       if ((parsed as { version?: unknown })?.version !== 1) throw new Error('unsupported config version');
       if (!validateConfig(parsed)) throw new Error('invalid config shape');
-      return parsed;
+      return {
+        ...parsed,
+        settings: {
+          ...parsed.settings,
+          settingsInWindow: parsed.settings.settingsInWindow ?? false,
+          activityInWindow: parsed.settings.activityInWindow ?? false
+        }
+      };
     } catch {
       // Corrupt or future-versioned: back the file up and start fresh.
       try {

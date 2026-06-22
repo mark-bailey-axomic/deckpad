@@ -157,4 +157,26 @@ describe('ConfigStore', () => {
     const onDisk = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8'));
     expect(onDisk.settings.accent).toBe('#AABBCC');
   });
+
+  it('normalizes missing settingsInWindow/activityInWindow to false on load', () => {
+    // Config valid for validateConfig but omits the two newer boolean fields
+    const legacyConfig = {
+      version: 1,
+      grid: { cols: 4, rows: 3 },
+      settings: {
+        accent: '#34D399',
+        surface: 'near-black',
+        showLabels: true,
+        launchStartup: false,
+        alwaysOnTop: false
+        // settingsInWindow and activityInWindow intentionally absent
+      },
+      groups: [{ id: '00000000-0000-0000-0000-000000000001', name: 'Actions', slots: Array(12).fill(null) }]
+    };
+    writeFileSync(join(dir, 'config.json'), JSON.stringify(legacyConfig), 'utf8');
+    const store = new ConfigStore(dir);
+    const cfg = store.load();
+    expect(cfg.settings.settingsInWindow).toBe(false);
+    expect(cfg.settings.activityInWindow).toBe(false);
+  });
 });

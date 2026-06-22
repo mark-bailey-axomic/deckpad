@@ -65,6 +65,44 @@ html, body, #root { height: 100%; margin: 0; }
   overflow-y: auto;
 }
 
+/* Edit modal: fill the window as content (drop the scrim overlay + centered-card chrome). */
+.dp-dialog-window .dp-scrim {
+  position: static;
+  inset: auto;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  backdrop-filter: none;
+  animation: none;
+}
+
+.dp-dialog-window .dp-modal {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  flex: 1 1 auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+}
+
+/* Body grows so the foot (Save/Cancel) pins to the bottom of the window. */
+.dp-dialog-window .dp-modal-body {
+  flex: 1 1 auto;
+}
+
+/* Frameless window: modal header is the drag region; its buttons opt out. */
+.dp-dialog-window .dp-modal-head {
+  -webkit-app-region: drag;
+}
+
+.dp-dialog-window .dp-modal-head button {
+  -webkit-app-region: no-drag;
+}
+
 /* Win/Linux slim close button at bar-right. */
 .dp-close-btn {
   -webkit-app-region: no-drag;

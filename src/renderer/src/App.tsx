@@ -32,6 +32,9 @@ export function App(): ReactElement | null {
   const [renaming, setRenaming] = useState<{ gi: number; value: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // tracks whether the Activity dialog window is currently open
+  const activityWindowOpenRef = useRef(false);
+
   // drag state
   const dragFrom = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
@@ -116,7 +119,7 @@ export function App(): ReactElement | null {
 
   // Push live data to the activity window when it is open and data changes.
   useEffect(() => {
-    if (activityInWindow) {
+    if (activityInWindow && activityWindowOpenRef.current) {
       void deck.updateDialog('activity', { items: panelItems, now, accent: accentForEffect, surface: surfaceForEffect });
     }
   }, [activityInWindow, panelItems, now, accentForEffect, surfaceForEffect]);
@@ -279,6 +282,10 @@ export function App(): ReactElement | null {
 
   // Wire up the dialog message handler with current-scope functions (runs on every render but ref assignment is cheap).
   dialogMessageHandlerRef.current = ({ view, message }) => {
+    if (view === 'activity' && (message as { type?: string }).type === 'dialog-closed') {
+      activityWindowOpenRef.current = false;
+      return;
+    }
     const m = message as DialogMessage;
     if (view === 'edit' && m.type === 'save') {
       setSlots((slots) => slots.map((s, i) => (i === m.index ? m.button : s)));
@@ -311,6 +318,7 @@ export function App(): ReactElement | null {
             if (config.settings.activityInWindow) {
               const btn = e.currentTarget;
               void deck.openDialog('activity', { items: panelItems, now, accent, surface: config.settings.surface });
+              activityWindowOpenRef.current = true;
               btn.blur();
             } else setPanelOpen((o) => !o);
           }}>
@@ -438,6 +446,7 @@ export function App(): ReactElement | null {
         <Toast toast={toast} onView={() => {
           if (config?.settings.activityInWindow) {
             void deck.openDialog('activity', { items: panelItems, now, accent, surface: config.settings.surface });
+            activityWindowOpenRef.current = true;
           } else {
             setPanelOpen(true);
           }

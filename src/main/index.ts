@@ -152,7 +152,12 @@ function createDialogWindow(view: DialogView, payload: unknown): string {
     void win.loadFile(join(__dirname, '../renderer/dialog.html'), { search: query });
   }
   win.once('ready-to-show', () => win.show());
-  win.on('closed', () => { dialogs.close(id); });
+  win.on('closed', () => {
+    dialogs.close(id);
+    if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send(IPC.dialogMessage, { view, message: { type: 'dialog-closed' } });
+    }
+  });
   return id;
 }
 

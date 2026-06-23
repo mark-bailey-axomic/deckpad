@@ -562,7 +562,7 @@ describe('App — activityInWindow pushes panelItems via updateDialog', () => {
     await deck.saveConfig(cfg);
   });
 
-  it('calls deck.updateDialog with activity and items when activityInWindow is true and an action starts running', async () => {
+  it('calls deck.updateDialog with activity and items when the window is open and an action outputs', async () => {
     const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
     updateDialogSpy = vi.spyOn(deck, 'updateDialog');
 
@@ -576,14 +576,77 @@ describe('App — activityInWindow pushes panelItems via updateDialog', () => {
     await screen.findByText('Watcher');
     await waitFor(() => expect(stateListener).not.toBeNull());
 
-    // Simulate a 'started' event so the action becomes running (panelItems gains an entry)
+    // Start the action so the pill appears
     stateListener!({ type: 'started', buttonId: 'btn2', startedAt: Date.now() });
+
+    // Click the pill to open the Activity window (sets activityWindowOpenRef = true)
+    const pill = await screen.findByText(/running/);
+    fireEvent.click(pill);
+
+    // Now output arrives — panelItems changes and window IS open, so updateDialog must fire
+    stateListener!({ type: 'output', buttonId: 'btn2', chunk: 'hello\n' });
 
     await waitFor(() =>
       expect(updateDialogSpy).toHaveBeenCalledWith('activity', expect.objectContaining({
         items: expect.arrayContaining([expect.objectContaining({ button: expect.objectContaining({ id: 'btn2' }) })]),
       }))
     );
+  });
+
+  it('gates updateDialog: does not push until openDialog is called, then stops after dialog-closed', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    updateDialogSpy = vi.spyOn(deck, 'updateDialog');
+
+    // Capture onDialogMessage callback so we can simulate the dialog-closed lifecycle message
+    let dialogCb: ((m: { view: DialogView; message: unknown }) => void) | null = null;
+    const onDialogMessageSpy = vi.spyOn(deck, 'onDialogMessage').mockImplementation((cb) => {
+      dialogCb = cb;
+      return () => undefined;
+    });
+
+    let stateListener: ((e: import('@shared/types').ActionStateEvent) => void) | null = null;
+    onActionStateSpy = vi.spyOn(deck, 'onActionState').mockImplementation((cb) => {
+      stateListener = cb;
+      return () => { stateListener = null; };
+    });
+
+    render(<App />);
+    await screen.findByText('Watcher');
+    await waitFor(() => expect(stateListener).not.toBeNull());
+    await waitFor(() => expect(dialogCb).not.toBeNull());
+
+    // --- Phase 1: window NOT open — panelItems change must NOT trigger updateDialog ---
+    updateDialogSpy.mockClear();
+    stateListener!({ type: 'started', buttonId: 'btn2', startedAt: Date.now() });
+    // Give React a render cycle to flush any effects
+    await new Promise((r) => setTimeout(r, 50));
+    expect(updateDialogSpy).not.toHaveBeenCalledWith('activity', expect.anything());
+
+    // --- Phase 2: open the Activity window via the pill (pill is visible because an action is running) ---
+    const pill = await screen.findByText(/running/);
+    fireEvent.click(pill);
+    // openDialog should have been called for 'activity'
+    await waitFor(() =>
+      expect(vi.spyOn(deck, 'openDialog')).toBeDefined()
+    );
+    updateDialogSpy.mockClear();
+    // Cause another panelItems change — now the window IS open, so updateDialog should fire
+    stateListener!({ type: 'output', buttonId: 'btn2', chunk: 'hello\n' });
+    await waitFor(() =>
+      expect(updateDialogSpy).toHaveBeenCalledWith('activity', expect.objectContaining({
+        items: expect.arrayContaining([expect.objectContaining({ button: expect.objectContaining({ id: 'btn2' }) })]),
+      }))
+    );
+
+    // --- Phase 3: simulate dialog-closed IPC from main ---
+    updateDialogSpy.mockClear();
+    dialogCb!({ view: 'activity', message: { type: 'dialog-closed' } });
+    // Cause another panelItems change — window is now closed, must NOT push
+    stateListener!({ type: 'output', buttonId: 'btn2', chunk: 'world\n' });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(updateDialogSpy).not.toHaveBeenCalledWith('activity', expect.anything());
+
+    onDialogMessageSpy.mockRestore();
   });
 });
 

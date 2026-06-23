@@ -159,7 +159,9 @@ describe('ConfigStore', () => {
   });
 
   it('normalizes missing settingsInWindow/activityInWindow to false on load', () => {
-    // Config valid for validateConfig but omits the two newer boolean fields
+    // Legacy config from before the window-mode settings: omits the two newer
+    // boolean fields, so it is NOT valid under the current strict validateConfig
+    // until ConfigStore.load() normalizes them to false (which is what this test covers).
     const legacyConfig = {
       version: 1,
       grid: { cols: 4, rows: 3 },

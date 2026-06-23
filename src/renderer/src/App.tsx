@@ -108,7 +108,7 @@ export function App(): ReactElement | null {
           return [{ button: b, groupName: g.name, state: 'failed' as const, log: rt.log, exit: rt.exit ?? 1, ranFor: rt.ranFor ?? 0 }];
         return [];
       })
-    ), [config, runtimes]); // eslint-disable-line react-hooks/exhaustive-deps
+    ), [config, runtimes]);
 
   const accentForEffect = config?.settings.accent ?? '';
   const surfaceForEffect = config?.settings.surface ?? 'near-black';

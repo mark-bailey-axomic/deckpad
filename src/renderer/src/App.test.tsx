@@ -596,6 +596,7 @@ describe('App — activityInWindow pushes panelItems via updateDialog', () => {
   it('gates updateDialog: does not push until openDialog is called, then stops after dialog-closed', async () => {
     const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
     updateDialogSpy = vi.spyOn(deck, 'updateDialog');
+    const openDialogSpy = vi.spyOn(deck, 'openDialog');
 
     // Capture onDialogMessage callback so we can simulate the dialog-closed lifecycle message
     let dialogCb: ((m: { view: DialogView; message: unknown }) => void) | null = null;
@@ -626,9 +627,7 @@ describe('App — activityInWindow pushes panelItems via updateDialog', () => {
     const pill = await screen.findByText(/running/);
     fireEvent.click(pill);
     // openDialog should have been called for 'activity'
-    await waitFor(() =>
-      expect(vi.spyOn(deck, 'openDialog')).toBeDefined()
-    );
+    expect(openDialogSpy).toHaveBeenCalledWith('activity', expect.anything());
     updateDialogSpy.mockClear();
     // Cause another panelItems change — now the window IS open, so updateDialog should fire
     stateListener!({ type: 'output', buttonId: 'btn2', chunk: 'hello\n' });

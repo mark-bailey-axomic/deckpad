@@ -6,6 +6,7 @@ import { Settings } from '../components/Settings';
 import type { SettingsValues } from '../components/Settings';
 import { ActivityPanel } from '../components/ActivityPanel';
 import type { EditPayload, SettingsPayload, ActivityPayload, DialogMessage } from './messages';
+import { DialogFallback } from './DialogFallback';
 
 interface Props {
   view: DialogView;
@@ -29,7 +30,7 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
     return deck.onDialogUpdate((p) => { if (p != null) setPayload(p); });
   }, [deck]);
 
-  if (failed) return <div className="dp-dialog-window" style={{ padding: 16 }}>Dialog unavailable.</div>;
+  if (failed) return <DialogFallback message="Dialog unavailable." />;
 
   if (payload === undefined) return null;
 

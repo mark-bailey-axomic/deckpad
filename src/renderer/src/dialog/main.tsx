@@ -5,12 +5,13 @@ import { createRoot } from 'react-dom/client';
 import { getDeck } from '../lib/deck';
 import { DialogHost } from './DialogHost';
 import { parseDialogParams } from './params';
+import { DialogFallback } from './DialogFallback';
 
 const parsed = parseDialogParams(window.location.search);
 
 if (parsed === null) {
   createRoot(document.getElementById('root')!).render(
-    <div className="dp-dialog-window" style={{ padding: 16 }}>Invalid dialog.</div>
+    <DialogFallback message="Invalid dialog." />
   );
 } else {
   createRoot(document.getElementById('root')!).render(

@@ -36,4 +36,20 @@ describe('parseDialogParams', () => {
     const result = parseDialogParams('?view=edit&id=');
     expect(result).toBeNull();
   });
+
+  it('returned view is narrowed to DialogView (no cast needed — type guard covers all valid views)', () => {
+    // Ensures each valid DialogView value round-trips through parseDialogParams without a cast
+    const cases: Array<[string, string]> = [
+      ['edit', 'edit'],
+      ['settings', 'settings'],
+      ['activity', 'activity'],
+    ];
+    for (const [view, expected] of cases) {
+      const result = parseDialogParams(`?view=${view}&id=test-id`);
+      expect(result).not.toBeNull();
+      expect(result!.view).toBe(expected);
+    }
+    // An unknown view must still return null (guard rejects it)
+    expect(parseDialogParams('?view=dashboard&id=test-id')).toBeNull();
+  });
 });

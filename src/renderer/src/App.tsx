@@ -110,18 +110,16 @@ export function App(): ReactElement | null {
       })
     ), [config, runtimes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Stable signature so updateDialog fires only on real changes, not every render.
-  const panelItemsSignature = useMemo(() => JSON.stringify(panelItems), [panelItems]);
   const accentForEffect = config?.settings.accent ?? '';
   const surfaceForEffect = config?.settings.surface ?? 'near-black';
+  const activityInWindow = config?.settings.activityInWindow ?? false;
 
   // Push live data to the activity window when it is open and data changes.
   useEffect(() => {
-    if (config?.settings.activityInWindow) {
+    if (activityInWindow) {
       void deck.updateDialog('activity', { items: panelItems, now, accent: accentForEffect, surface: surfaceForEffect });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panelItemsSignature, now, accentForEffect, surfaceForEffect]);
+  }, [activityInWindow, panelItems, now, accentForEffect, surfaceForEffect]);
 
   if (!config) return null;
   const { cols, rows } = config.grid;

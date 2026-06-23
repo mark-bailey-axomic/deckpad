@@ -541,6 +541,52 @@ describe('group tab reorder', () => {
   });
 });
 
+describe('App — activityInWindow pushes panelItems via updateDialog', () => {
+  let onActionStateSpy: MockInstance<DeckApi['onActionState']>;
+  let updateDialogSpy: MockInstance<DeckApi['updateDialog']>;
+
+  beforeEach(async () => {
+    await seedConfig([button('btn2', 'Watcher')]);
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, activityInWindow: true };
+    await deck.saveConfig(cfg);
+  });
+
+  afterEach(async () => {
+    onActionStateSpy?.mockRestore();
+    updateDialogSpy?.mockRestore();
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, activityInWindow: false };
+    await deck.saveConfig(cfg);
+  });
+
+  it('calls deck.updateDialog with activity and items when activityInWindow is true and an action starts running', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    updateDialogSpy = vi.spyOn(deck, 'updateDialog');
+
+    let stateListener: ((e: import('@shared/types').ActionStateEvent) => void) | null = null;
+    onActionStateSpy = vi.spyOn(deck, 'onActionState').mockImplementation((cb) => {
+      stateListener = cb;
+      return () => { stateListener = null; };
+    });
+
+    render(<App />);
+    await screen.findByText('Watcher');
+    await waitFor(() => expect(stateListener).not.toBeNull());
+
+    // Simulate a 'started' event so the action becomes running (panelItems gains an entry)
+    stateListener!({ type: 'started', buttonId: 'btn2', startedAt: Date.now() });
+
+    await waitFor(() =>
+      expect(updateDialogSpy).toHaveBeenCalledWith('activity', expect.objectContaining({
+        items: expect.arrayContaining([expect.objectContaining({ button: expect.objectContaining({ id: 'btn2' }) })]),
+      }))
+    );
+  });
+});
+
 describe('window chrome', () => {
   it('macOS: bar has is-mac padding class and no close button', async () => {
     render(<App />);

@@ -23,7 +23,7 @@ import { launchUntracked } from './launchers';
 import { handleQuitRequest, handleWindowCloseRequest } from './quit-flow';
 import { DialogStore } from './dialog-store';
 import { dialogWindowOptions } from './dialog-options';
-import { broadcastToWebContents } from './broadcast';
+import { broadcastToWebContents, liveWebContents } from './broadcast';
 import { registerDialogIpc } from './dialog-ipc';
 import type { DialogView } from '@shared/types';
 
@@ -81,11 +81,11 @@ async function pickFile(kind: PickKind): Promise<string | null> {
 }
 
 const sendActionState = (e: ActionStateEvent): void => {
-  const targets = [
-    ...(mainWindow ? [mainWindow.webContents] : []),
-    ...dialogs.allWindows().map((w) => (w as BrowserWindow).webContents)
+  const windows = [
+    ...(mainWindow ? [mainWindow] : []),
+    ...(dialogs.allWindows() as BrowserWindow[])
   ];
-  broadcastToWebContents(targets, IPC.actionState, e);
+  broadcastToWebContents(liveWebContents(windows), IPC.actionState, e);
 };
 
 const runner = new Runner({ spawn, send: sendActionState });

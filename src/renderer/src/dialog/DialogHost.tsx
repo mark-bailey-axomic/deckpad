@@ -24,11 +24,10 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
       .catch(() => setFailed(true));
   }, [deck, id]);
 
-  // Activity is independent + live: re-render when main window pushes fresh data.
+  // Any dialog window accepts payload refreshes: live activity updates + dedup/focus re-open.
   useEffect(() => {
-    if (view !== 'activity') return;
     return deck.onDialogUpdate((p) => { if (p != null) setPayload(p); });
-  }, [deck, view]);
+  }, [deck]);
 
   if (failed) return <div className="dp-dialog-window" style={{ padding: 16 }}>Dialog unavailable.</div>;
 

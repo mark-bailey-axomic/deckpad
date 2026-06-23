@@ -156,6 +156,25 @@ describe('DialogHost', () => {
     window.removeEventListener('unhandledrejection', unhandledHandler);
   });
 
+  it('edit view refreshes its payload when onDialogUpdate fires (dedup/focus re-open)', async () => {
+    const oldPayload: EditPayload = {
+      ...editPayload,
+      draft: { ...editPayload.draft, label: 'OldLabel' },
+    };
+    const { deck, fireUpdate } = mockDeckWithUpdateCapture(oldPayload);
+    render(<DialogHost view="edit" id="id-edit-refresh" deck={deck} />);
+
+    await waitFor(() => expect(screen.getByDisplayValue('OldLabel')).toBeInTheDocument());
+
+    const newPayload: EditPayload = {
+      ...editPayload,
+      draft: { ...editPayload.draft, label: 'NewLabel' },
+    };
+    await act(async () => { fireUpdate(newPayload); });
+
+    expect(await screen.findByDisplayValue('NewLabel')).toBeInTheDocument();
+  });
+
   it('activity view re-renders live when onDialogUpdate fires', async () => {
     const { deck, fireUpdate } = mockDeckWithUpdateCapture(emptyActivityPayload);
     render(<DialogHost view="activity" id="id-a" deck={deck} />);

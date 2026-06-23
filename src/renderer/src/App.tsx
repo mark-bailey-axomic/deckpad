@@ -95,7 +95,7 @@ export function App(): ReactElement | null {
 
   // Subscribe to messages from dialog windows and apply them through existing paths.
   // deck is stable; the actual handler is swapped via ref so the effect runs once.
-  useEffect(() => deck.onDialogMessage((m) => dialogMessageHandlerRef.current(m)), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => deck.onDialogMessage((m) => dialogMessageHandlerRef.current(m)), [deck]);
 
   // Compute panel items here so the updateDialog effect can live before the early return.
   const panelItems: ActivityItem[] = useMemo(() =>

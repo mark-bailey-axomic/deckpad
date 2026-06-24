@@ -4,7 +4,7 @@ import { useActionStates } from './useActionStates';
 import type { ActionStateEvent, Button, DeckApi, RunningSnapshot } from '@shared/types';
 
 const cmdButton: Button = { id: 'b1', label: 'X', type: 'command', command: 'sleep 5', icon: { kind: 'auto' } };
-const fileButton: Button = { id: 'b2', label: 'Y', type: 'file', path: '/tmp/y.txt', icon: { kind: 'auto' } };
+const terminalButton: Button = { id: 'b2', label: 'Y', type: 'command', command: 'echo hi', showTerminal: true, icon: { kind: 'auto' } };
 
 function fakeDeck(snapshots: RunningSnapshot[] = []) {
   let emit: (e: ActionStateEvent) => void = () => {};
@@ -94,10 +94,10 @@ describe('useActionStates', () => {
     expect(log.at(-1)).toBe('l59-9');
   });
 
-  it('untracked press (file/app/showTerminal) flashes launching then returns to idle', async () => {
+  it('untracked press (showTerminal command) flashes launching then returns to idle', async () => {
     const { deck } = fakeDeck();
     const { result } = renderHook(() => useActionStates(deck, () => {}));
-    await act(async () => { result.current.press(fileButton); });
+    await act(async () => { result.current.press(terminalButton); });
     expect(result.current.runtimes.get('b2')?.state).toBe('launching');
     act(() => vi.advanceTimersByTime(600));
     expect(result.current.runtimes.get('b2')?.state).toBe('idle');

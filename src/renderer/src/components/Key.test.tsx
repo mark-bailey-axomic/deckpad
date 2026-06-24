@@ -90,12 +90,10 @@ describe('Key states', () => {
     expect(screen.getByText('🔥')).toBeInTheDocument();
   });
 
-  it('auto file/app icon renders deckicon img and falls back to letters on error', () => {
-    const b: Button = { ...button, type: 'app', path: '/Applications/X.app', command: undefined };
+  it('renders the terminal glyph for a script button with an auto icon', () => {
+    const b: Button = { id: 'b', label: 'S', type: 'script' as const, language: 'sh' as const, script: 'echo hi', icon: { kind: 'auto' as const } };
     const { container } = render(<Key {...base} button={b} runtime={rt()} />);
-    const img = container.querySelector('img')!;
-    expect(img).toHaveAttribute('src', 'deckicon://b1.png');
-    fireEvent.error(img);
-    expect(screen.getByText('DS')).toBeInTheDocument();
+    expect(container.querySelector('img.dp-key-img')).toBeNull();
+    expect(container.querySelector('.dp-key-glyph svg')).toBeInTheDocument();
   });
 });

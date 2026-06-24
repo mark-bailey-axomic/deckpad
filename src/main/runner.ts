@@ -4,12 +4,28 @@ import type { ActionStateEvent, Button, RunningSnapshot } from '@shared/types';
 import { OutputBatcher } from './output-batcher';
 import { RingBuffer } from './ring-buffer';
 
+export interface ResolvedSpawn {
+  /** Program to spawn (or the full command string when shell is true). */
+  file: string;
+  args: string[];
+  shell: boolean;
+  /** Invoked once when the run finishes — e.g. delete a script temp file. */
+  cleanup?: () => void;
+}
+
+/** Default resolver: a command button runs its string through the shell. */
+export function commandSpawn(button: Button): ResolvedSpawn {
+  return { file: button.command ?? '', args: [], shell: true };
+}
+
 export interface RunnerOptions {
   spawn: typeof nodeSpawn;
   send: (e: ActionStateEvent) => void;
   platform?: NodeJS.Platform;
   /** Injectable for tests; defaults to process.kill (negative pid = whole tree). */
   kill?: (pid: number, signal: NodeJS.Signals) => void;
+  /** Maps a button to its spawn invocation; defaults to commandSpawn. */
+  resolve?: (button: Button) => ResolvedSpawn;
 }
 
 interface Run {
@@ -22,6 +38,8 @@ interface Run {
   exitCode?: number;
   /** Set when stop() or killAll() requested this run to be killed. */
   stopped?: boolean;
+  /** Spec cleanup (e.g. delete a script temp file); run once in finish(). */
+  cleanup?: () => void;
 }
 
 export class Runner {
@@ -30,12 +48,14 @@ export class Runner {
   private readonly send: (e: ActionStateEvent) => void;
   private readonly platform: NodeJS.Platform;
   private readonly kill: (pid: number, signal: NodeJS.Signals) => void;
+  private readonly resolve: (button: Button) => ResolvedSpawn;
 
   constructor(opts: RunnerOptions) {
     this.spawn = opts.spawn;
     this.send = opts.send;
     this.platform = opts.platform ?? process.platform;
     this.kill = opts.kill ?? ((pid, signal) => process.kill(pid, signal));
+    this.resolve = opts.resolve ?? commandSpawn;
   }
 
   isRunning(id: string): boolean {
@@ -69,13 +89,14 @@ export class Runner {
       this.send({ type: 'output', buttonId: id, chunk });
     });
 
-    const child = this.spawn(button.command ?? '', {
-      shell: true,
+    const spec = this.resolve(button);
+    const child = this.spawn(spec.file, spec.args, {
+      shell: spec.shell,
       cwd: button.cwd || undefined,
       detached: this.platform !== 'win32'
     });
 
-    this.runs.set(id, { child, startedAt, output, batcher });
+    this.runs.set(id, { child, startedAt, output, batcher, cleanup: spec.cleanup });
     this.send({ type: 'started', buttonId: id, startedAt });
 
     child.stdout?.on('data', (d: Buffer) => batcher.push(d.toString()));
@@ -108,6 +129,11 @@ export class Runner {
     const run = this.runs.get(id);
     if (!run) return; // already finished (error + close double-fire)
     run.batcher.dispose(); // flushes final output first; later pushes are dropped
+    try {
+      run.cleanup?.();
+    } catch {
+      // temp file already gone / unlink raced with exit — nothing actionable
+    }
     if (run.killTimer) {
       clearTimeout(run.killTimer);
       run.killTimer = undefined;

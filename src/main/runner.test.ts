@@ -33,7 +33,7 @@ afterEach(() => vi.useRealTimers());
 describe('Runner.run', () => {
   it('spawns via shell with cwd and detached on POSIX, and emits started', () => {
     runner.run(button());
-    expect(spawn).toHaveBeenCalledWith('npm run dev', { shell: true, cwd: '/proj', detached: true });
+    expect(spawn).toHaveBeenCalledWith('npm run dev', [], { shell: true, cwd: '/proj', detached: true });
     expect(events[0]).toEqual({ type: 'started', buttonId: 'b1', startedAt: 10_000 });
     expect(runner.isRunning('b1')).toBe(true);
   });
@@ -41,7 +41,24 @@ describe('Runner.run', () => {
   it('is not detached on win32 and omits cwd when unset', () => {
     const winRunner = new Runner({ spawn: spawn as never, send: () => {}, platform: 'win32', kill });
     winRunner.run(button({ cwd: undefined }));
-    expect(spawn).toHaveBeenCalledWith('npm run dev', { shell: true, cwd: undefined, detached: false });
+    expect(spawn).toHaveBeenCalledWith('npm run dev', [], { shell: true, cwd: undefined, detached: false });
+  });
+
+  it('uses an injected resolver to build the spawn call', () => {
+    const resolve = vi.fn(() => ({ file: '/bin/zsh', args: ['-lc', 'node "/tmp/x.js"'], shell: false }));
+    const r = new Runner({ spawn: spawn as never, send: (e) => events.push(e), platform: 'darwin', kill, resolve });
+    r.run(button({ id: 'sc', type: 'script' }));
+    expect(spawn).toHaveBeenCalledWith('/bin/zsh', ['-lc', 'node "/tmp/x.js"'], { shell: false, cwd: '/proj', detached: true });
+  });
+
+  it('runs the spec cleanup when the run finishes', () => {
+    const cleanup = vi.fn();
+    const resolve = vi.fn(() => ({ file: 'sh', args: ['-c', 'true'], shell: false, cleanup }));
+    const r = new Runner({ spawn: spawn as never, send: (e) => events.push(e), platform: 'darwin', kill, resolve });
+    r.run(button({ id: 'sc' }));
+    child.emit('exit', 0);
+    child.emit('close', 0);
+    expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
   it('batches stdout+stderr into output events (~50 ms)', () => {

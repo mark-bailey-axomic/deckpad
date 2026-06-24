@@ -88,7 +88,6 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
           onSave={(button) => { void sendThenClose({ type: 'save', button, index: (payload as EditPayload).index }); }}
           onCancel={close}
           pickFile={(kind) => deck.pickFile(kind)}
-          extractIcon={(path, buttonId) => deck.extractIcon(path, buttonId)}
         />
       )}
 

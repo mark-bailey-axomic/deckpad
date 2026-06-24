@@ -20,6 +20,8 @@ async function seedConfig(slots: (Button | null)[] = []) {
   const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
   const cfg = await deck.getConfig();
   cfg.grid = { cols: 4, rows: 3 };
+  // Reset dialog-window flags so settings mutated by one test don't leak into the next.
+  cfg.settings = { ...cfg.settings, settingsInWindow: false, activityInWindow: false };
   const capacity = cfg.grid.cols * cfg.grid.rows;
   cfg.groups = [{ id: 'g1', name: 'Actions', slots: [...slots, ...Array(Math.max(0, capacity - slots.length)).fill(null)] }];
   await deck.saveConfig(cfg);
@@ -700,6 +702,120 @@ describe('toolbar focus', () => {
 
     expect(blurSpy).toHaveBeenCalledTimes(1);
     blurSpy.mockRestore();
+  });
+});
+
+describe('App — fast-path close and mount-while-open (PR review fixes)', () => {
+  beforeEach(async () => {
+    await seedConfig([]);
+  });
+
+  it('fast-path: clicking Settings button twice (inline mode) toggles closed and never calls openDialog', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const openDialogSpy = vi.spyOn(deck, 'openDialog');
+
+    render(<App />);
+    await screen.findByText('Actions');
+
+    // Open the settings sheet inline (settingsInWindow is false by default)
+    fireEvent.click(screen.getByTitle('Settings'));
+    await waitFor(() => expect(document.querySelector('.dp-sheet.is-open')).toBeTruthy());
+
+    // Click again — fast-path should close it WITHOUT calling openDialog
+    openDialogSpy.mockClear();
+    fireEvent.click(screen.getByTitle('Settings'));
+    await waitFor(() => expect(document.querySelector('.dp-sheet.is-open')).toBeNull());
+    expect(openDialogSpy).not.toHaveBeenCalled();
+
+    openDialogSpy.mockRestore();
+  });
+
+  it('fast-path (settingsInWindow): opens sheet inline, switches to window mode, next click closes not opens dialog', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const openDialogSpy = vi.spyOn(deck, 'openDialog');
+
+    render(<App />);
+    await screen.findByText('Actions');
+
+    // Step 1: open inline sheet (settingsInWindow: false → settingsOpen=true)
+    fireEvent.click(screen.getByTitle('Settings'));
+    await waitFor(() => expect(document.querySelector('.dp-sheet.is-open')).toBeTruthy());
+
+    // Step 2: enable "settingsInWindow" from within the open sheet via its ToggleRow.
+    // settingsInWindow is now true, but the inline sheet stays open (settingsOpen=true).
+    fireEvent.click(screen.getByText('Open Settings in its own window'));
+    await waitFor(() => expect(document.querySelector('.dp-sheet.is-open')).toBeTruthy());
+
+    // Step 3: click the Settings button — the fast-path must close the still-open inline
+    // sheet rather than calling openDialog, even though window mode is now selected.
+    openDialogSpy.mockClear();
+    fireEvent.click(screen.getByTitle('Settings'));
+    await waitFor(() => expect(document.querySelector('.dp-sheet.is-open')).toBeNull());
+    expect(openDialogSpy).not.toHaveBeenCalled();
+
+    openDialogSpy.mockRestore();
+  });
+
+  it('fast-path: activity pill click when panel already open closes panel (not openDialog)', async () => {
+    await seedConfig([button('bfp1', 'FastJob')]);
+
+    vi.useFakeTimers();
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const openDialogSpy = vi.spyOn(deck, 'openDialog');
+
+    render(<App />);
+    await vi.waitFor(() => expect(document.querySelector('.dp-key--filled')).toBeTruthy());
+
+    // Start the action (activityInWindow: false by default → inline panel)
+    fireEvent.click(document.querySelector('.dp-key--filled')!);
+    await vi.advanceTimersByTimeAsync(600); // mock deck: started at 200ms + 300ms reveal
+    const pill = screen.getByText(/running/);
+
+    // First click: opens the inline panel
+    openDialogSpy.mockClear();
+    fireEvent.click(pill);
+    await vi.waitFor(() => expect(document.querySelector('.dp-panel.is-open')).toBeTruthy());
+    expect(openDialogSpy).not.toHaveBeenCalled(); // inline mode → no dialog
+
+    // Second click: fast-path closes panel
+    fireEvent.click(pill);
+    await vi.waitFor(() => expect(document.querySelector('.dp-panel.is-open')).toBeNull());
+    expect(openDialogSpy).not.toHaveBeenCalled();
+
+    // Drain the mock's pending exit timer (200+1800=2000ms) so it doesn't leak.
+    await vi.advanceTimersByTimeAsync(2000);
+    vi.useRealTimers();
+    openDialogSpy.mockRestore();
+  });
+
+  it('mount-while-open: inline Settings stays in DOM when settingsInWindow is toggled on while sheet is open', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+
+    let dialogCb: ((m: { view: import('@shared/types').DialogView; message: unknown }) => void) | null = null;
+    const onDialogMessageSpy = vi.spyOn(deck, 'onDialogMessage').mockImplementation((cb) => {
+      dialogCb = cb;
+      return () => undefined;
+    });
+
+    render(<App />);
+    await screen.findByText('Actions');
+    await waitFor(() => expect(dialogCb).not.toBeNull());
+
+    // Open inline settings
+    fireEvent.click(screen.getByTitle('Settings'));
+    await waitFor(() => expect(document.querySelector('.dp-sheet.is-open')).toBeTruthy());
+
+    // Simulate settings-change from dialog that sets settingsInWindow: true
+    dialogCb!({ view: 'settings', message: { type: 'settings-change', patch: { settingsInWindow: true } } });
+
+    // Give React a render cycle
+    await waitFor(() => {
+      // After fix: (!settingsInWindow || settingsOpen) = (!true || true) = true → still mounted
+      // Before fix: !settingsInWindow = false → unmounted immediately
+      expect(document.querySelector('.dp-sheet')).toBeTruthy();
+    });
+
+    onDialogMessageSpy.mockRestore();
   });
 });
 

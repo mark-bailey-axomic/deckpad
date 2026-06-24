@@ -72,4 +72,9 @@ describe('registerDialogIpc', () => {
     await expect(call(IPC.getDialogPayload, '')).rejects.toThrow('invalid dialog id');
     await expect(call(IPC.closeDialog, 123)).rejects.toThrow('invalid dialog id');
   });
+
+  it('openDialog rejects prototype-chain keys (Object.hasOwn, not in)', async () => {
+    registerDialogIpc(deps());
+    await expect(call(IPC.openDialog, 'toString', {})).rejects.toThrow('invalid dialog view');
+  });
 });

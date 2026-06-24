@@ -315,6 +315,7 @@ export function App(): ReactElement | null {
         {runningCount > 0 && (
           <button className="dp-pill" onClick={(e) => {
             e.stopPropagation();
+            if (panelOpen) { setPanelOpen(false); return; }
             if (config.settings.activityInWindow) {
               const btn = e.currentTarget;
               void deck.openDialog('activity', { items: panelItems, now, accent, surface: config.settings.surface });
@@ -351,6 +352,7 @@ export function App(): ReactElement | null {
           </button>
           <button className={'dp-icon-btn' + (settingsOpen ? ' is-active' : '')} onClick={(e) => {
             e.stopPropagation();
+            if (settingsOpen) { setSettingsOpen(false); return; }
             if (config.settings.settingsInWindow) {
               const btn = e.currentTarget;
               void deck.openDialog('settings', { settings: settingsValues, accent, surface: config.settings.surface });
@@ -431,11 +433,11 @@ export function App(): ReactElement | null {
         ))}
       </div>
 
-      {!config.settings.activityInWindow && (
+      {(!config.settings.activityInWindow || panelOpen) && (
         <ActivityPanel open={panelOpen} items={panelItems} now={now} accent={accent}
           onStop={stop} onClose={() => setPanelOpen(false)} />
       )}
-      {!config.settings.settingsInWindow && (
+      {(!config.settings.settingsInWindow || settingsOpen) && (
         <Settings open={settingsOpen}
           settings={settingsValues}
           onChange={onSettingsChange}

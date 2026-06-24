@@ -2,10 +2,10 @@ import { ipcMain } from 'electron';
 import { IPC } from '@shared/constants';
 import type { DialogView } from '@shared/types';
 
-const VIEWS: readonly string[] = ['edit', 'settings', 'activity'];
+const VALID_VIEWS = { edit: true, settings: true, activity: true } as const satisfies Record<DialogView, true>;
 
 function assertView(v: unknown): asserts v is DialogView {
-  if (typeof v !== 'string' || !VIEWS.includes(v)) throw new Error('invalid dialog view');
+  if (typeof v !== 'string' || !Object.hasOwn(VALID_VIEWS, v)) throw new Error('invalid dialog view');
 }
 function assertId(v: unknown): asserts v is string {
   if (typeof v !== 'string' || v.length === 0) throw new Error('invalid dialog id');

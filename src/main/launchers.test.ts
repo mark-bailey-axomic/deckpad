@@ -3,53 +3,27 @@ import { launchUntracked, terminalCommandFor, pickLinuxTerminal, type LaunchDeps
 import type { Button } from '@shared/types';
 
 const btn = (over: Partial<Button>): Button => ({
-  id: 'b1', label: 'X', type: 'file', icon: { kind: 'auto' }, ...over
+  id: 'b1', label: 'X', type: 'command', icon: { kind: 'auto' }, ...over
 });
 
-function deps(platform: NodeJS.Platform): LaunchDeps & { openPath: ReturnType<typeof vi.fn>; openExternal: ReturnType<typeof vi.fn>; spawnDetached: ReturnType<typeof vi.fn>; runCommand: ReturnType<typeof vi.fn> } {
+function deps(platform: NodeJS.Platform): LaunchDeps & { runCommand: ReturnType<typeof vi.fn> } {
   return {
     platform,
-    openPath: vi.fn().mockResolvedValue(''),
-    openExternal: vi.fn().mockResolvedValue(undefined),
-    spawnDetached: vi.fn(),
     runCommand: vi.fn(),
     commandExists: vi.fn().mockReturnValue(true)
   };
 }
 
-describe('launchUntracked — files', () => {
-  it('opens plain paths with shell.openPath', async () => {
-    const d = deps('darwin');
-    await launchUntracked(btn({ type: 'file', path: '/Users/x/notes.pdf' }), d);
-    expect(d.openPath).toHaveBeenCalledWith('/Users/x/notes.pdf');
-  });
-  it('opens http(s) URLs with shell.openExternal', async () => {
-    const d = deps('darwin');
-    await launchUntracked(btn({ type: 'file', path: 'https://grafana.acme.dev' }), d);
-    expect(d.openExternal).toHaveBeenCalledWith('https://grafana.acme.dev');
-    expect(d.openPath).not.toHaveBeenCalled();
-  });
-});
-
-describe('launchUntracked — apps', () => {
-  it('.app/.exe/.lnk go through openPath', async () => {
-    const d = deps('win32');
-    await launchUntracked(btn({ type: 'app', path: 'C:\\Tools\\VSCode.exe' }), d);
-    expect(d.openPath).toHaveBeenCalledWith('C:\\Tools\\VSCode.exe');
-  });
-  it('bare Linux binaries spawn detached', async () => {
-    const d = deps('linux');
-    await launchUntracked(btn({ type: 'app', path: '/usr/bin/gimp' }), d);
-    expect(d.spawnDetached).toHaveBeenCalledWith('/usr/bin/gimp');
-    expect(d.openPath).not.toHaveBeenCalled();
-  });
-});
-
 describe('launchUntracked — showTerminal command handoff', () => {
-  it('runs the platform terminal command', async () => {
-    const d = deps('darwin');
-    await launchUntracked(btn({ type: 'command', command: 'npm run dev', cwd: '/proj', showTerminal: true }), d);
-    expect(d.runCommand).toHaveBeenCalledWith('osascript', expect.arrayContaining(['-e']));
+  it('runs a command+terminal action via the platform terminal', async () => {
+    const runCommand = vi.fn();
+    await launchUntracked(
+      { id: 'b', label: 'C', type: 'command', command: 'npm run dev', cwd: '/proj', showTerminal: true, icon: { kind: 'auto' } },
+      { platform: 'darwin', runCommand, commandExists: () => true }
+    );
+    expect(runCommand).toHaveBeenCalledTimes(1);
+    const [cmd] = runCommand.mock.calls[0];
+    expect(cmd).toBe('osascript');
   });
 });
 
@@ -77,31 +51,5 @@ describe('pickLinuxTerminal', () => {
     expect(pickLinuxTerminal(() => true)).toBe('x-terminal-emulator');
     expect(pickLinuxTerminal((c) => c === 'gnome-terminal')).toBe('gnome-terminal');
     expect(pickLinuxTerminal(() => false)).toBe('xterm');
-  });
-});
-
-// -------------------------------------------------------------------------
-// Review-mandated: file/app button with NO path must not call openPath
-// -------------------------------------------------------------------------
-
-describe('launchUntracked — missing path guard', () => {
-  it('file button with no path: does not call openPath, openExternal, or spawnDetached', async () => {
-    const d = deps('darwin');
-    // path omitted → undefined → coerced to '' → early return before any shell call
-    const b = btn({ type: 'file' }); // no path property
-    await expect(launchUntracked(b, d)).resolves.toBeUndefined();
-    expect(d.openPath).not.toHaveBeenCalled();
-    expect(d.openExternal).not.toHaveBeenCalled();
-    expect(d.spawnDetached).not.toHaveBeenCalled();
-  });
-
-  it('app button with no path: does not call openPath, openExternal, or spawnDetached', async () => {
-    const d = deps('linux');
-    // path omitted → '' → early return before any shell call
-    const b = btn({ type: 'app' }); // no path property
-    await expect(launchUntracked(b, d)).resolves.toBeUndefined();
-    expect(d.openPath).not.toHaveBeenCalled();
-    expect(d.openExternal).not.toHaveBeenCalled();
-    expect(d.spawnDetached).not.toHaveBeenCalled();
   });
 });

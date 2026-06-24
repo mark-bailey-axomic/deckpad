@@ -241,7 +241,7 @@ import type { Button } from '@shared/types';
 describe('makeRunActionHandler routing', () => {
   const command: Button = { id: 'c1', label: 'C', type: 'command', command: 'true', icon: { kind: 'auto' } };
   const terminal: Button = { ...command, id: 'c2', showTerminal: true };
-  const script: Button = { id: 's1', label: 'S', type: 'script', scriptId: 'script-a', icon: { kind: 'auto' } };
+  const script: Button = { id: 's1', label: 'S', type: 'script', language: 'sh', script: 'echo hi', icon: { kind: 'auto' } };
 
   function makeDeps() {
     return {

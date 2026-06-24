@@ -24,9 +24,10 @@ export type DialogWireMessage = DialogMessage | DialogLifecycleMessage;
 export function isValidPayload(view: DialogView, p: unknown): boolean {
   if (typeof p !== 'object' || p === null) return false;
   const o = p as Record<string, unknown>;
+  if (typeof o.accent !== 'string' || typeof o.surface !== 'string') return false;
   switch (view) {
     case 'edit': return 'draft' in o && typeof o.index === 'number';
     case 'settings': return typeof o.settings === 'object' && o.settings !== null;
-    case 'activity': return Array.isArray(o.items);
+    case 'activity': return Array.isArray(o.items) && typeof o.now === 'number';
   }
 }

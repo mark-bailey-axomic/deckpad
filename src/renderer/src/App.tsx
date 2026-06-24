@@ -115,14 +115,14 @@ export function App(): ReactElement | null {
 
   const accentForEffect = config?.settings.accent ?? '';
   const surfaceForEffect = config?.settings.surface ?? 'near-black';
-  const activityInWindow = config?.settings.activityInWindow ?? false;
 
-  // Push live data to the activity window when it is open and data changes.
+  // Push live data to the activity window while it is open (independent of the persisted
+  // activityInWindow pref, so toggling the pref off doesn't freeze an already-open window).
   useEffect(() => {
-    if (activityInWindow && activityWindowOpenRef.current) {
+    if (activityWindowOpenRef.current) {
       void deck.updateDialog('activity', { items: panelItems, now, accent: accentForEffect, surface: surfaceForEffect });
     }
-  }, [activityInWindow, panelItems, now, accentForEffect, surfaceForEffect]);
+  }, [panelItems, now, accentForEffect, surfaceForEffect]);
 
   if (!config) return null;
   const { cols, rows } = config.grid;

@@ -709,6 +709,49 @@ describe('App — activityInWindow pushes panelItems via updateDialog', () => {
     onDialogMessageSpy.mockRestore();
   });
 
+  it('keeps pushing to an open activity window after activityInWindow pref is toggled off', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    updateDialogSpy = vi.spyOn(deck, 'updateDialog');
+
+    let dialogCb: ((m: { view: DialogView; message: unknown }) => void) | null = null;
+    const onDialogMessageSpy = vi.spyOn(deck, 'onDialogMessage').mockImplementation((cb) => {
+      dialogCb = cb;
+      return () => undefined;
+    });
+
+    let stateListener: ((e: import('@shared/types').ActionStateEvent) => void) | null = null;
+    onActionStateSpy = vi.spyOn(deck, 'onActionState').mockImplementation((cb) => {
+      stateListener = cb;
+      return () => { stateListener = null; };
+    });
+
+    render(<App />);
+    await screen.findByText('Watcher');
+    await waitFor(() => expect(stateListener).not.toBeNull());
+    await waitFor(() => expect(dialogCb).not.toBeNull());
+
+    // Open the activity window (sets activityWindowOpenRef = true)
+    stateListener!({ type: 'started', buttonId: 'btn2', startedAt: Date.now() });
+    const pill = await screen.findByText(/running/);
+    fireEvent.click(pill);
+
+    // User toggles activityInWindow OFF via the settings-change path. Let the config
+    // re-render fully flush so the effect would observe the pref as false under old code.
+    dialogCb!({ view: 'settings', message: { type: 'settings-change', patch: { activityInWindow: false } } });
+    await new Promise((r) => setTimeout(r, 50));
+
+    // A new output arrives — the open window must still receive the update
+    updateDialogSpy.mockClear();
+    stateListener!({ type: 'output', buttonId: 'btn2', chunk: 'still live\n' });
+    await waitFor(() =>
+      expect(updateDialogSpy).toHaveBeenCalledWith('activity', expect.objectContaining({
+        items: expect.arrayContaining([expect.objectContaining({ button: expect.objectContaining({ id: 'btn2' }) })]),
+      }))
+    );
+
+    onDialogMessageSpy.mockRestore();
+  });
+
   it('does not push updateDialog when openDialog rejects (ref stays false)', async () => {
     const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
     updateDialogSpy = vi.spyOn(deck, 'updateDialog');

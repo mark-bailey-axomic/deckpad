@@ -30,6 +30,18 @@ describe('isValidPayload', () => {
     expect(isValidPayload('activity', { items: {} })).toBe(false);
   });
 
+  it('rejects an edit payload missing accent', () => {
+    expect(isValidPayload('edit', { draft: {}, index: 0, surface: 'near-black' })).toBe(false);
+  });
+
+  it('rejects a payload with non-string surface', () => {
+    expect(isValidPayload('edit', { draft: {}, index: 0, accent: '#fff', surface: 1 })).toBe(false);
+  });
+
+  it('rejects an activity payload missing numeric now', () => {
+    expect(isValidPayload('activity', { items: [], accent: '#fff', surface: 'near-black' })).toBe(false);
+  });
+
   it('rejects null and non-object values', () => {
     expect(isValidPayload('edit', null)).toBe(false);
     expect(isValidPayload('edit', undefined)).toBe(false);

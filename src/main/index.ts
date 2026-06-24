@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeImage } from 'electron';
 import { spawn, spawnSync, execFile as _execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -18,8 +18,9 @@ import { baseWindowOptions } from './window-options';
 import { windowSizeForGrid } from './window-size';
 import { ConfigStore } from './config-store';
 import { makeRunActionHandler, registerIpc } from './ipc';
-import { Runner } from './runner';
+import { Runner, commandSpawn } from './runner';
 import { launchUntracked } from './launchers';
+import { resolveScriptSpawn, defaultScriptExecDeps } from './script-exec';
 import { handleQuitRequest, handleWindowCloseRequest } from './quit-flow';
 import { DialogStore } from './dialog-store';
 import { dialogWindowOptions } from './dialog-options';
@@ -88,7 +89,14 @@ const sendActionState = (e: ActionStateEvent): void => {
   broadcastToWebContents(liveWebContents(windows), IPC.actionState, e);
 };
 
-const runner = new Runner({ spawn, send: sendActionState });
+const runner = new Runner({
+  spawn,
+  send: sendActionState,
+  resolve: (button) =>
+    button.type === 'script'
+      ? resolveScriptSpawn(button, defaultScriptExecDeps)
+      : commandSpawn(button)
+});
 
 const commandExists = (cmd: string): boolean =>
   spawnSync(process.platform === 'win32' ? 'where' : 'which', [cmd]).status === 0;
@@ -99,13 +107,6 @@ const runAction = makeRunActionHandler({
   launchUntracked: (b) =>
     launchUntracked(b, {
       platform: process.platform,
-      openPath: (p) => shell.openPath(p),
-      openExternal: (url) => shell.openExternal(url),
-      spawnDetached: (cmd) => {
-        const child = spawn(cmd, [], { detached: true, stdio: 'ignore' });
-        child.on('error', () => undefined); // missing binary: untracked launch, nothing to surface
-        child.unref();
-      },
       runCommand: (cmd, args) => {
         const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
         child.on('error', () => undefined);

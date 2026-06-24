@@ -40,7 +40,7 @@ function mockDeckWithUpdateCapture(payload: unknown): {
 }
 
 const editPayload: EditPayload = {
-  draft: { id: 'b1', isNew: false, label: 'Hello', type: 'command', command: 'echo hi', cwd: '', showTerminal: false, path: '', icon: { kind: 'auto' } },
+  draft: { id: 'b1', isNew: false, label: 'Hello', type: 'command', command: 'echo hi', cwd: '', showTerminal: false, icon: { kind: 'auto' } },
   index: 3, accent: '#34D399', surface: 'near-black'
 };
 
@@ -241,7 +241,7 @@ describe('DialogHost', () => {
 
     // Build a new payload with one running ActivityItem whose label is "LiveUpdate".
     const liveItem: ActivityItem = {
-      button: { id: 'btn-live', label: 'LiveUpdate', type: 'command', command: 'echo live', cwd: '', showTerminal: false, path: '', icon: { kind: 'auto' } },
+      button: { id: 'btn-live', label: 'LiveUpdate', type: 'command', command: 'echo live', cwd: '', showTerminal: false, icon: { kind: 'auto' } },
       groupName: 'G',
       state: 'running',
       startedAt: Date.now(),

@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactElement } from 'react';
-import type { Button, PickKind } from '@shared/types';
+import { useEffect, useState, type KeyboardEvent, type ReactElement } from 'react';
+import type { Button, PickKind, ScriptLanguage } from '@shared/types';
 import { EMOJIS, TILE_COLORS } from '@shared/constants';
 import { deriveLetters } from '@shared/buttons';
 import { DeckIcon } from './DeckIcon';
@@ -7,8 +7,6 @@ import { ToggleRow } from './ToggleRow';
 
 export interface ModalDraft extends Button {
   isNew: boolean;
-  /** Basename shown in the "Auto from file" badge after a successful pick. */
-  autoFrom?: string;
 }
 
 export function newDraft(): ModalDraft {
@@ -20,7 +18,8 @@ export function newDraft(): ModalDraft {
     command: '',
     cwd: '',
     showTerminal: false,
-    path: '',
+    script: '',
+    language: 'sh',
     icon: { kind: 'auto' }
   };
 }
@@ -32,15 +31,22 @@ export interface EditModalProps {
   onSave: (button: Button) => void;
   onCancel: () => void;
   pickFile: (kind: PickKind) => Promise<string | null>;
-  extractIcon: (path: string, buttonId: string) => Promise<string | null>;
 }
 
-function basename(p: string): string {
-  return p.split(/[/\\]/).filter(Boolean).at(-1) ?? p;
-}
+const TYPE_LABELS: Record<Button['type'], string> = {
+  command: 'Run command',
+  script: 'Add script'
+};
+
+const LANG_LABELS: Record<ScriptLanguage, string> = {
+  javascript: 'JavaScript',
+  typescript: 'TypeScript',
+  python: 'Python',
+  sh: 'SH'
+};
 
 export function EditModal(props: EditModalProps): ReactElement | null {
-  const { open, accent, onSave, onCancel, pickFile, extractIcon } = props;
+  const { open, accent, onSave, onCancel, pickFile } = props;
   const [d, setD] = useState<ModalDraft | null>(props.draft);
   const [emojiOpen, setEmojiOpen] = useState(false);
 
@@ -53,52 +59,53 @@ export function EditModal(props: EditModalProps): ReactElement | null {
 
   if (!open || !d) return null;
 
-  const set = (patch: Partial<ModalDraft>) => setD((p) => p ? { ...p, ...patch } : p);
+  const set = (patch: Partial<ModalDraft>): void => setD((p) => (p ? { ...p, ...patch } : p));
 
-  const handleFileRowClick = async () => {
-    const kind: PickKind = d.type === 'app' ? 'app' : 'file';
-    const p = await pickFile(kind);
-    if (p) {
-      const name = basename(p);
-      set({ path: p, label: d.label || name, autoFrom: name, icon: { kind: 'auto' } });
-      void extractIcon(p, d.id);
-    }
-  };
-
-  const handleChooseImage = async () => {
+  const handleChooseImage = async (): Promise<void> => {
     const p = await pickFile('image');
-    if (p) {
-      set({ icon: { ...d.icon, kind: 'image', sourcePath: p } });
-    }
+    if (p) set({ icon: { ...d.icon, kind: 'image', sourcePath: p } });
   };
 
-  const handlePickEmoji = () => {
+  const handlePickEmoji = (): void => {
     set({ icon: { ...d.icon, kind: 'emoji', emoji: d.icon.emoji ?? '🚀' } });
     setEmojiOpen((o) => !o);
   };
 
-  const handleLetterTile = () => {
+  const handleLetterTile = (): void => {
     set({ icon: { ...d.icon, kind: 'letter', tileColor: d.icon.tileColor ?? accent } });
   };
 
-  const handleTypeChange = (type: Button['type']) => {
-    set({ type, path: '', autoFrom: undefined });
+  const handleTypeChange = (type: Button['type']): void => {
+    set({ type, language: type === 'script' ? (d.language ?? 'sh') : d.language });
   };
 
-  const handleSave = () => {
-    const { isNew: _isNew, autoFrom: _autoFrom, ...button } = d;
+  const handleScriptKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    const { selectionStart: start, selectionEnd: end } = el;
+    const body = d.script ?? '';
+    set({ script: body.slice(0, start) + '  ' + body.slice(end) });
+    // Restore the caret after React re-renders the controlled value.
+    requestAnimationFrame(() => {
+      el.selectionStart = el.selectionEnd = start + 2;
+    });
+  };
+
+  const handleSave = (): void => {
+    const { isNew: _isNew, ...button } = d;
     // Drop fields that don't apply to the chosen type so stale values never persist.
     if (button.type === 'command') {
-      delete button.path;
+      delete button.script;
+      delete button.language;
     } else {
       delete button.command;
-      delete button.cwd;
       delete button.showTerminal;
     }
     onSave(button);
   };
 
-  const previewTile = () => {
+  const previewTile = (): ReactElement => {
     const k = d.icon.kind;
     if (k === 'letter') {
       return (
@@ -121,24 +128,18 @@ export function EditModal(props: EditModalProps): ReactElement | null {
         </div>
       );
     }
-    // auto
-    const iconName = d.type === 'file' ? 'file' : d.type === 'app' ? 'app' : 'terminal';
     return (
       <div className="dp-prev-tile dp-prev-tile--key" style={{ color: accent }}>
-        <DeckIcon name={iconName} size={28} />
+        <DeckIcon name="terminal" size={28} />
       </div>
     );
   };
 
   const isCommand = d.type === 'command';
-  const fileLabel = d.type === 'app' ? 'Application' : 'File';
-  const filePlaceholder = d.type === 'app' ? 'Choose an application…' : 'Choose a file…';
+  const scriptEmpty = !(d.script ?? '').trim();
 
   return (
-    <div
-      className="dp-scrim"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-    >
+    <div className="dp-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className="dp-modal" role="dialog" aria-modal="true">
         <div className="dp-modal-head">
           <div className="dp-modal-title">{d.isNew ? 'Add action' : 'Edit action'}</div>
@@ -164,22 +165,15 @@ export function EditModal(props: EditModalProps): ReactElement | null {
           <div className="dp-field">
             <label className="dp-field-label">Action type</label>
             <div className="dp-seg">
-              {(['command', 'file', 'app'] as const).map((v) => {
-                const labels: Record<string, string> = {
-                  command: 'Run command',
-                  file: 'Open file',
-                  app: 'Launch app'
-                };
-                return (
-                  <button
-                    key={v}
-                    className={'dp-seg-btn' + (d.type === v ? ' is-on' : '')}
-                    onClick={() => handleTypeChange(v)}
-                  >
-                    {labels[v]}
-                  </button>
-                );
-              })}
+              {(['command', 'script'] as const).map((v) => (
+                <button
+                  key={v}
+                  className={'dp-seg-btn' + (d.type === v ? ' is-on' : '')}
+                  onClick={() => handleTypeChange(v)}
+                >
+                  {TYPE_LABELS[v]}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -215,36 +209,52 @@ export function EditModal(props: EditModalProps): ReactElement | null {
               />
             </>
           ) : (
-            <div className="dp-field">
-              <label className="dp-field-label">{fileLabel}</label>
-              <div className="dp-picker">
-                <button className="dp-file-row" onClick={handleFileRowClick}>
-                  <DeckIcon
-                    name={d.path
-                      ? (d.type === 'app' ? 'app' : 'file')
-                      : (d.type === 'app' ? 'app' : 'folderOpen')}
-                    size={18}
-                    style={{ color: d.path ? accent : '#7A7A86' }}
-                  />
-                  <span className={d.path ? 'dp-file-path' : 'dp-file-path is-placeholder'}>
-                    {d.path || filePlaceholder}
-                  </span>
-                  <DeckIcon name="chevronDown" size={16} style={{ color: '#7A7A86', marginLeft: 'auto' }} />
-                </button>
+            <>
+              <div className="dp-field">
+                <label className="dp-field-label">Language</label>
+                <div className="dp-seg">
+                  {(['javascript', 'typescript', 'python', 'sh'] as const).map((v) => (
+                    <button
+                      key={v}
+                      className={'dp-seg-btn' + ((d.language ?? 'sh') === v ? ' is-on' : '')}
+                      onClick={() => set({ language: v })}
+                    >
+                      {LANG_LABELS[v]}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+              <div className="dp-field">
+                <label className="dp-field-label">Script</label>
+                <textarea
+                  className="dp-input dp-mono dp-textarea"
+                  rows={8}
+                  spellCheck={false}
+                  value={d.script ?? ''}
+                  placeholder="Write your script here…"
+                  onChange={(e) => set({ script: e.target.value })}
+                  onKeyDown={handleScriptKeyDown}
+                />
+              </div>
+              <div className="dp-field">
+                <label className="dp-field-label">
+                  Working directory <span className="dp-opt">optional</span>
+                </label>
+                <input
+                  className="dp-input dp-mono"
+                  value={d.cwd ?? ''}
+                  placeholder="~/dev/acme-web"
+                  onChange={(e) => set({ cwd: e.target.value })}
+                />
+              </div>
+            </>
           )}
 
           {/* Icon section */}
           <div className="dp-field">
             <label className="dp-field-label">Icon</label>
             <div className="dp-icon-section">
-              <div className="dp-prev-wrap">
-                {previewTile()}
-                {d.icon.kind === 'auto' && d.autoFrom && (
-                  <span className="dp-auto-badge">Auto from file</span>
-                )}
-              </div>
+              <div className="dp-prev-wrap">{previewTile()}</div>
               <div className="dp-icon-controls">
                 <div className="dp-icon-btns">
                   <button
@@ -306,7 +316,7 @@ export function EditModal(props: EditModalProps): ReactElement | null {
           <button
             className="dp-btn dp-btn--primary"
             style={{ background: accent }}
-            disabled={!d.label.trim()}
+            disabled={!d.label.trim() || (d.type === 'script' && scriptEmpty)}
             onClick={handleSave}
           >
             Save action

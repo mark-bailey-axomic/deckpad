@@ -122,7 +122,7 @@ export function App(): ReactElement | null {
     if (activityWindowOpenRef.current) {
       void deck.updateDialog('activity', { items: panelItems, now, accent: accentForEffect, surface: surfaceForEffect });
     }
-  }, [panelItems, now, accentForEffect, surfaceForEffect]);
+  }, [deck, panelItems, now, accentForEffect, surfaceForEffect]);
 
   if (!config) return null;
   const { cols, rows } = config.grid;

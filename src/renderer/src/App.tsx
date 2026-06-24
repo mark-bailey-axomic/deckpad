@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { BAR_H, GLOW, GRID_LIMITS, KEY_SIZE, GAP, PAD, RADIUS, SURFACES, TABS_H } from '@shared/constants';
 import { indexOfId, insertShiftReorder, resizeGroups } from '@shared/layout';
-import type { Button, Config, Group } from '@shared/types';
+import type { Button, Config, DialogView, Group } from '@shared/types';
 import { getDeck } from './lib/deck';
 import { useActionStates, type FailInfo } from './hooks/useActionStates';
 import { useNowTick } from './hooks/useNowTick';
@@ -9,10 +9,11 @@ import { Key } from './components/Key';
 import { DeckIcon } from './components/DeckIcon';
 import { Toast, type ToastState } from './components/Toast';
 import { ContextMenu, type MenuState } from './components/ContextMenu';
-import { EditModal, newDraft, type ModalDraft } from './components/EditModal';
+import { newDraft, type ModalDraft } from './components/EditModal';
 import { ActivityPanel, type ActivityItem } from './components/ActivityPanel';
 import { Settings, type SettingsValues } from './components/Settings';
 import { Stepper } from './components/Stepper';
+import type { DialogWireMessage } from './dialog/messages';
 
 const deck = getDeck();
 
@@ -26,11 +27,13 @@ export function App(): ReactElement | null {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [gridPop, setGridPop] = useState(false);
   const [menu, setMenu] = useState<MenuState | null>(null);
-  const [modal, setModal] = useState<{ draft: ModalDraft; index: number } | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [pressedId, setPressedId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ gi: number; value: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // tracks whether the Activity dialog window is currently open
+  const activityWindowOpenRef = useRef(false);
 
   // drag state
   const dragFrom = useRef<number | null>(null);
@@ -83,12 +86,43 @@ export function App(): ReactElement | null {
   useEffect(() => {
     const onDoc = () => { setMenu(null); setGridPop(false); };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setMenu(null); setModal(null); setSettingsOpen(false); setGridPop(false); setRenaming(null); }
+      if (e.key === 'Escape') { setMenu(null); setSettingsOpen(false); setGridPop(false); setRenaming(null); }
     };
     document.addEventListener('click', onDoc);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('click', onDoc); document.removeEventListener('keydown', onKey); };
   }, []);
+
+  // Stable ref to dialog message handler — populated after config loads.
+  const dialogMessageHandlerRef = useRef<(m: { view: DialogView; message: unknown }) => void>(() => undefined);
+
+  // Subscribe to messages from dialog windows and apply them through existing paths.
+  // deck is stable; the actual handler is swapped via ref so the effect runs once.
+  useEffect(() => deck.onDialogMessage((m) => dialogMessageHandlerRef.current(m)), [deck]);
+
+  // Compute panel items here so the updateDialog effect can live before the early return.
+  const panelItems: ActivityItem[] = useMemo(() =>
+    (config?.groups ?? []).flatMap((g) =>
+      g.slots.filter((s): s is Button => s !== null).flatMap((b): ActivityItem[] => {
+        const rt = runtimes.get(b.id);
+        if (!rt) return [];
+        if (rt.state === 'running') return [{ button: b, groupName: g.name, state: 'running' as const, startedAt: rt.startedAt, log: rt.log }];
+        if (rt.state === 'failed' || rt.failedDot)
+          return [{ button: b, groupName: g.name, state: 'failed' as const, log: rt.log, exit: rt.exit ?? 1, ranFor: rt.ranFor ?? 0 }];
+        return [];
+      })
+    ), [config, runtimes]);
+
+  const accentForEffect = config?.settings.accent ?? '';
+  const surfaceForEffect = config?.settings.surface ?? 'near-black';
+
+  // Push live data to the activity window while it is open (independent of the persisted
+  // activityInWindow pref, so toggling the pref off doesn't freeze an already-open window).
+  useEffect(() => {
+    if (activityWindowOpenRef.current) {
+      void deck.updateDialog('activity', { items: panelItems, now, accent: accentForEffect, surface: surfaceForEffect });
+    }
+  }, [deck, panelItems, now, accentForEffect, surfaceForEffect]);
 
   if (!config) return null;
   const { cols, rows } = config.grid;
@@ -97,6 +131,15 @@ export function App(): ReactElement | null {
   const accent = config.settings.accent;
   const surf = SURFACES[config.settings.surface];
   const actionCount = group.slots.filter(Boolean).length;
+  const settingsValues: SettingsValues = {
+    cols, rows, accent,
+    surface: config.settings.surface,
+    showLabels: config.settings.showLabels,
+    launchStartup: config.settings.launchStartup,
+    alwaysOnTop: config.settings.alwaysOnTop,
+    settingsInWindow: config.settings.settingsInWindow,
+    activityInWindow: config.settings.activityInWindow
+  };
 
   // ---- slot/group mutations (all via commit) ----
   /** Deleting a button must also stop its process if one is active. */
@@ -155,19 +198,17 @@ export function App(): ReactElement | null {
     commit((prev) => ({ ...prev, grid: { cols: newCols, rows: newRows }, groups }));
   };
 
+  const openEditor = (draft: ModalDraft, index: number) =>
+    deck.openDialog('edit', { draft, index, accent, surface: config.settings.surface })
+      .catch(() => showToast({ kind: 'info', message: 'Could not open the editor' }));
+
   const pressKey = (idx: number) => {
     const b = group.slots[idx];
-    if (!b) { setModal({ draft: newDraft(), index: idx }); return; }
-    if (editMode) { setModal({ draft: { ...structuredClone(b), isNew: false }, index: idx }); return; }
+    if (!b) { openEditor(newDraft(), idx); return; }
+    if (editMode) { openEditor({ ...structuredClone(b), isNew: false }, idx); return; }
     setPressedId(b.id);
     setTimeout(() => setPressedId(null), 160);
     press(b);
-  };
-
-  const saveModal = (button: Button) => {
-    const idx = modal!.index;
-    setSlots((slots) => slots.map((s, i) => (i === idx ? button : s)));
-    setModal(null);
   };
 
   const addGroup = () => {
@@ -203,7 +244,7 @@ export function App(): ReactElement | null {
     if (!menu) return;
     const b = group.slots[menu.index];
     setMenu(null);
-    if (b) setModal({ draft: { ...structuredClone(b), isNew: false }, index: menu.index });
+    if (b) openEditor({ ...structuredClone(b), isNew: false }, menu.index);
   };
   const ctxDuplicate = () => {
     if (!menu) return;
@@ -240,17 +281,21 @@ export function App(): ReactElement | null {
     commit((cfg) => ({ ...cfg, settings: { ...cfg.settings, ...patch } }));
   };
 
-  // Activity panel items: running first, then failed-dot entries (persist until next run)
-  const panelItems: ActivityItem[] = config.groups.flatMap((g) =>
-    g.slots.filter((s): s is Button => s !== null).flatMap((b): ActivityItem[] => {
-      const rt = runtimes.get(b.id);
-      if (!rt) return [];
-      if (rt.state === 'running') return [{ button: b, groupName: g.name, state: 'running' as const, startedAt: rt.startedAt, log: rt.log }];
-      if (rt.state === 'failed' || rt.failedDot)
-        return [{ button: b, groupName: g.name, state: 'failed' as const, log: rt.log, exit: rt.exit ?? 1, ranFor: rt.ranFor ?? 0 }];
-      return [];
-    })
-  );
+  // Wire up the dialog message handler with current-scope functions (runs on every render but ref assignment is cheap).
+  dialogMessageHandlerRef.current = ({ view, message }) => {
+    const m = message as DialogWireMessage;
+    if (view === 'activity' && m.type === 'dialog-closed') {
+      activityWindowOpenRef.current = false;
+      return;
+    }
+    if (view === 'edit' && m.type === 'save') {
+      setSlots((slots) => slots.map((s, i) => (i === m.index ? m.button : s)));
+    } else if (view === 'settings' && m.type === 'settings-change') {
+      onSettingsChange(m.patch);
+    } else if (view === 'activity' && m.type === 'activity-stop') {
+      stop(m.buttonId);
+    }
+  };
 
   return (
     <div
@@ -269,7 +314,17 @@ export function App(): ReactElement | null {
           <span className="dp-brand-name">DeckPad</span>
         </div>
         {runningCount > 0 && (
-          <button className="dp-pill" onClick={(e) => { e.stopPropagation(); setPanelOpen((o) => !o); }}>
+          <button className="dp-pill" onClick={(e) => {
+            e.stopPropagation();
+            if (panelOpen) { setPanelOpen(false); return; }
+            if (config.settings.activityInWindow) {
+              const btn = e.currentTarget;
+              deck.openDialog('activity', { items: panelItems, now, accent, surface: config.settings.surface })
+                .then(() => { activityWindowOpenRef.current = true; })
+                .catch(() => { activityWindowOpenRef.current = false; });
+              btn.blur();
+            } else setPanelOpen((o) => !o);
+          }}>
             <span className="dp-pill-dot" style={{ background: accent }} />
             {runningCount} running
           </button>
@@ -297,7 +352,16 @@ export function App(): ReactElement | null {
           <button className={'dp-icon-btn' + (editMode ? ' is-active' : '')} onClick={() => setEditMode((e2) => !e2)} title="Edit layout">
             <DeckIcon name="pencil" size={17} />
           </button>
-          <button className={'dp-icon-btn' + (settingsOpen ? ' is-active' : '')} onClick={(e) => { e.stopPropagation(); setSettingsOpen((o) => !o); }} title="Settings">
+          <button className={'dp-icon-btn' + (settingsOpen ? ' is-active' : '')} onClick={(e) => {
+            e.stopPropagation();
+            if (settingsOpen) { setSettingsOpen(false); return; }
+            if (config.settings.settingsInWindow) {
+              const btn = e.currentTarget;
+              deck.openDialog('settings', { settings: settingsValues, accent, surface: config.settings.surface })
+                .catch(() => showToast({ kind: 'info', message: 'Could not open settings' }));
+              btn.blur();
+            } else setSettingsOpen((o) => !o);
+          }} title="Settings">
             <DeckIcon name="gear" size={18} />
           </button>
           {deck.platform !== 'darwin' && (
@@ -372,22 +436,31 @@ export function App(): ReactElement | null {
         ))}
       </div>
 
-      <ActivityPanel open={panelOpen} items={panelItems} now={now} accent={accent}
-        onStop={stop} onClose={() => setPanelOpen(false)} />
-      <Settings open={settingsOpen}
-        settings={{ cols, rows, accent, surface: config.settings.surface, showLabels: config.settings.showLabels, launchStartup: config.settings.launchStartup, alwaysOnTop: config.settings.alwaysOnTop }}
-        onChange={onSettingsChange}
-        onClose={() => setSettingsOpen(false)} />
+      {(!config.settings.activityInWindow || panelOpen) && (
+        <ActivityPanel open={panelOpen} items={panelItems} now={now} accent={accent}
+          onStop={stop} onClose={() => setPanelOpen(false)} />
+      )}
+      {(!config.settings.settingsInWindow || settingsOpen) && (
+        <Settings open={settingsOpen}
+          settings={settingsValues}
+          onChange={onSettingsChange}
+          onClose={() => setSettingsOpen(false)} />
+      )}
 
       <div className="dp-toast-layer">
-        <Toast toast={toast} onView={() => { setPanelOpen(true); setToast(null); }} onClose={() => setToast(null)} />
+        <Toast toast={toast} onView={() => {
+          if (config?.settings.activityInWindow) {
+            deck.openDialog('activity', { items: panelItems, now, accent, surface: config.settings.surface })
+              .then(() => { activityWindowOpenRef.current = true; })
+              .catch(() => { activityWindowOpenRef.current = false; });
+          } else {
+            setPanelOpen(true);
+          }
+          setToast(null);
+        }} onClose={() => setToast(null)} />
       </div>
 
       <ContextMenu menu={menu} onEdit={ctxEdit} onDuplicate={ctxDuplicate} onDelete={ctxDelete} />
-      <EditModal open={modal !== null} draft={modal?.draft ?? null} accent={accent}
-        onSave={saveModal} onCancel={() => setModal(null)}
-        pickFile={(kind) => deck.pickFile(kind)}
-        extractIcon={(path, buttonId) => deck.extractIcon(path, buttonId)} />
     </div>
   );
 }

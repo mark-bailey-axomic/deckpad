@@ -4,17 +4,20 @@ import { Settings } from './Settings';
 
 const settings = {
   cols: 4, rows: 3, accent: '#34D399', surface: 'near-black' as const,
-  showLabels: true, launchStartup: false, alwaysOnTop: false
+  showLabels: true, launchStartup: false, alwaysOnTop: false,
+  settingsInWindow: false, activityInWindow: false
 };
 
 describe('Settings sheet', () => {
-  it('renders steppers, 6 accent swatches, 3 surface cards, 3 toggles', () => {
+  it('renders steppers, 6 accent swatches, 3 surface cards, 5 toggles', () => {
     const { container } = render(<Settings open settings={settings} onChange={() => {}} onClose={() => {}} />);
     expect(container.querySelectorAll('.dp-swatch:not(.dp-swatch--sm)')).toHaveLength(6);
     expect(container.querySelectorAll('.dp-surf-opt')).toHaveLength(3);
     expect(screen.getByText('Show labels')).toBeInTheDocument();
     expect(screen.getByText('Launch at startup')).toBeInTheDocument();
     expect(screen.getByText('Always on top')).toBeInTheDocument();
+    expect(screen.getByText('Open Settings in its own window')).toBeInTheDocument();
+    expect(screen.getByText('Open Activity in its own window')).toBeInTheDocument();
   });
 
   it('emits patches for accent, surface, grid, and toggles', () => {

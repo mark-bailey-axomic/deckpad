@@ -55,6 +55,8 @@ export function validateConfig(value: unknown): value is Config {
   if (typeof settings['showLabels'] !== 'boolean') return false;
   if (typeof settings['launchStartup'] !== 'boolean') return false;
   if (typeof settings['alwaysOnTop'] !== 'boolean') return false;
+  if (typeof settings['settingsInWindow'] !== 'boolean') return false;
+  if (typeof settings['activityInWindow'] !== 'boolean') return false;
 
   // groups
   const groups = value['groups'];

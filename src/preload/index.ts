@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '@shared/constants';
-import type { ActionStateEvent, Config, DeckApi, PickKind } from '@shared/types';
+import type { ActionStateEvent, Config, DeckApi, DialogView, PickKind } from '@shared/types';
 
 const deck: DeckApi = {
   platform: process.platform,
@@ -17,6 +17,21 @@ const deck: DeckApi = {
     const listener = (_event: unknown, e: ActionStateEvent): void => cb(e);
     ipcRenderer.on(IPC.actionState, listener);
     return () => ipcRenderer.removeListener(IPC.actionState, listener);
+  },
+  openDialog: (view: DialogView, payload: unknown) => ipcRenderer.invoke(IPC.openDialog, view, payload),
+  getDialogPayload: (id: string) => ipcRenderer.invoke(IPC.getDialogPayload, id),
+  sendDialogMessage: (id: string, message: unknown) => ipcRenderer.invoke(IPC.sendDialogMessage, id, message),
+  closeDialog: (id: string) => ipcRenderer.invoke(IPC.closeDialog, id),
+  updateDialog: (view: DialogView, payload: unknown) => ipcRenderer.invoke(IPC.updateDialog, view, payload),
+  onDialogMessage: (cb: (m: { view: DialogView; message: unknown }) => void) => {
+    const listener = (_e: unknown, m: { view: DialogView; message: unknown }): void => cb(m);
+    ipcRenderer.on(IPC.dialogMessage, listener);
+    return () => ipcRenderer.removeListener(IPC.dialogMessage, listener);
+  },
+  onDialogUpdate: (cb: (payload: unknown) => void) => {
+    const listener = (_e: unknown, p: unknown): void => cb(p);
+    ipcRenderer.on(IPC.dialogUpdate, listener);
+    return () => ipcRenderer.removeListener(IPC.dialogUpdate, listener);
   }
 };
 

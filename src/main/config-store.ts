@@ -15,7 +15,9 @@ export function defaultConfig(): Config {
       surface: 'near-black',
       showLabels: true,
       launchStartup: false,
-      alwaysOnTop: false
+      alwaysOnTop: false,
+      settingsInWindow: false,
+      activityInWindow: false
     },
     groups: [{ id: randomUUID(), name: 'Actions', slots: Array(cols * rows).fill(null) }]
   };
@@ -33,8 +35,17 @@ export class ConfigStore {
     try {
       const parsed: unknown = JSON.parse(readFileSync(this.file, 'utf8'));
       if ((parsed as { version?: unknown })?.version !== 1) throw new Error('unsupported config version');
-      if (!validateConfig(parsed)) throw new Error('invalid config shape');
-      return parsed;
+      const p = parsed as { settings?: Record<string, unknown> };
+      const normalized = {
+        ...(parsed as object),
+        settings: {
+          ...(p.settings ?? {}),
+          settingsInWindow: p.settings?.['settingsInWindow'] ?? false,
+          activityInWindow: p.settings?.['activityInWindow'] ?? false
+        }
+      };
+      if (!validateConfig(normalized)) throw new Error('invalid config shape');
+      return normalized;
     } catch {
       // Corrupt or future-versioned: back the file up and start fresh.
       try {

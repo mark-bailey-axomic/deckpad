@@ -45,5 +45,13 @@ export const IPC = {
   extractIcon: 'icon:extract',
   setAlwaysOnTop: 'window:set-always-on-top',
   setLoginItem: 'app:set-login-item',
-  actionState: 'action-state'
+  actionState: 'action-state',
+  // dialog windows
+  openDialog: 'dialog:open',
+  getDialogPayload: 'dialog:get-payload',
+  sendDialogMessage: 'dialog:send-message',
+  closeDialog: 'dialog:close',
+  updateDialog: 'dialog:update-data',
+  dialogMessage: 'dialog:message',
+  dialogUpdate: 'dialog:update'
 } as const;

@@ -13,6 +13,8 @@ export interface SettingsValues {
   showLabels: boolean;
   launchStartup: boolean;
   alwaysOnTop: boolean;
+  settingsInWindow: boolean;
+  activityInWindow: boolean;
 }
 
 export interface SettingsProps {
@@ -85,6 +87,8 @@ export function Settings({ open, settings, onChange, onClose }: SettingsProps): 
         <ToggleRow label="Show labels" value={settings.showLabels} onChange={(v) => onChange({ showLabels: v })} />
         <ToggleRow label="Launch at startup" value={settings.launchStartup} onChange={(v) => onChange({ launchStartup: v })} />
         <ToggleRow label="Always on top" value={settings.alwaysOnTop} onChange={(v) => onChange({ alwaysOnTop: v })} />
+        <ToggleRow label="Open Settings in its own window" value={settings.settingsInWindow} onChange={(v) => onChange({ settingsInWindow: v })} />
+        <ToggleRow label="Open Activity in its own window" value={settings.activityInWindow} onChange={(v) => onChange({ activityInWindow: v })} />
       </div>
     </div>
   );

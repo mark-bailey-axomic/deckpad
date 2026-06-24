@@ -21,6 +21,11 @@ import { makeRunActionHandler, registerIpc } from './ipc';
 import { Runner } from './runner';
 import { launchUntracked } from './launchers';
 import { handleQuitRequest, handleWindowCloseRequest } from './quit-flow';
+import { DialogStore } from './dialog-store';
+import { dialogWindowOptions } from './dialog-options';
+import { broadcastToWebContents, liveWebContents } from './broadcast';
+import { registerDialogIpc } from './dialog-ipc';
+import type { DialogView } from '@shared/types';
 
 // Both createThumbnail and getFileIcon return generic icons for .app on macOS 26;
 // read the bundle's Info.plist → locate the .icns → convert to PNG via sips.
@@ -57,6 +62,7 @@ const darwinExtractBundleIcon: ExtractBundleIconFn = async (appBundlePath, destP
 const store = new ConfigStore(app.getPath('userData'));
 const iconsDir = join(app.getPath('userData'), 'icons');
 let mainWindow: BrowserWindow | null = null;
+const dialogs = new DialogStore(() => crypto.randomUUID());
 let lastConfig = store.load();
 
 const PICK_FILTERS: Record<PickKind, Electron.FileFilter[] | undefined> = {
@@ -75,9 +81,11 @@ async function pickFile(kind: PickKind): Promise<string | null> {
 }
 
 const sendActionState = (e: ActionStateEvent): void => {
-  if (mainWindow && !mainWindow.webContents.isDestroyed()) {
-    mainWindow.webContents.send(IPC.actionState, e);
-  }
+  const windows = [
+    ...(mainWindow ? [mainWindow] : []),
+    ...(dialogs.allWindows() as BrowserWindow[])
+  ];
+  broadcastToWebContents(liveWebContents(windows), IPC.actionState, e);
 };
 
 const runner = new Runner({ spawn, send: sendActionState });
@@ -120,6 +128,39 @@ function createWindow(grid: { cols: number; rows: number }): BrowserWindow {
   return win;
 }
 
+function createDialogWindow(view: DialogView, payload: unknown): string {
+  if (!mainWindow) throw new Error('no main window');
+
+  // Dedup: focus the existing window for this view and refresh its data.
+  const existing = dialogs.windowForView(view) as BrowserWindow | undefined;
+  if (existing && !existing.isDestroyed()) {
+    dialogs.setPayloadForView(view, payload);
+    if (!existing.webContents.isDestroyed()) existing.webContents.send(IPC.dialogUpdate, payload);
+    existing.focus();
+    return dialogs.idForView(view)!;
+  }
+
+  const preload = join(__dirname, '../preload/index.js');
+  const { options } = dialogWindowOptions(view, preload, mainWindow);
+  const win = new BrowserWindow(options);
+  const id = dialogs.open(view, win, payload);
+
+  const query = `?view=${view}&id=${id}`;
+  if (process.env.ELECTRON_RENDERER_URL) {
+    void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/dialog.html${query}`);
+  } else {
+    void win.loadFile(join(__dirname, '../renderer/dialog.html'), { search: query });
+  }
+  win.once('ready-to-show', () => win.show());
+  win.on('closed', () => {
+    dialogs.close(id);
+    if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send(IPC.dialogMessage, { view, message: { type: 'dialog-closed' } });
+    }
+  });
+  return id;
+}
+
 void app.whenReady().then(() => {
   registerDeckIconProtocol(iconsDir);
   registerIpc({
@@ -153,6 +194,25 @@ void app.whenReady().then(() => {
     setAlwaysOnTop: (v) => mainWindow?.setAlwaysOnTop(v),
     setLoginItem: (v) => app.setLoginItemSettings({ openAtLogin: v })
   });
+  registerDialogIpc({
+    openDialog: (view, payload) => createDialogWindow(view, payload),
+    getPayload: (id) => dialogs.payloadFor(id) ?? null,
+    sendMessage: (id, message) => {
+      const view = dialogs.viewForId(id);
+      if (view && mainWindow && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send(IPC.dialogMessage, { view, message });
+      }
+    },
+    closeDialog: (id) => {
+      const win = dialogs.close(id) as BrowserWindow | undefined;
+      if (win && !win.isDestroyed()) win.close();
+    },
+    updateDialog: (view, payload) => {
+      dialogs.setPayloadForView(view, payload);
+      const win = dialogs.windowForView(view) as BrowserWindow | undefined;
+      if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send(IPC.dialogUpdate, payload);
+    }
+  });
   mainWindow = createWindow(lastConfig.grid);
   const win = mainWindow;
   // Intercept window close: the dialog is parented to the window (still alive here).
@@ -170,6 +230,10 @@ void app.whenReady().then(() => {
     });
   });
   mainWindow.on('closed', () => {
+    for (const w of dialogs.allWindows()) {
+      const win = w as BrowserWindow;
+      if (!win.isDestroyed()) win.close();
+    }
     mainWindow = null;
   });
   mainWindow.setAlwaysOnTop(lastConfig.settings.alwaysOnTop);

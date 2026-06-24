@@ -40,7 +40,7 @@ describe('findButton', () => {
     const config: Config = {
       version: 1,
       grid: { cols: 2, rows: 2 },
-      settings: { accent: '#34D399', surface: 'near-black', showLabels: true, launchStartup: false, alwaysOnTop: false },
+      settings: { accent: '#34D399', surface: 'near-black', showLabels: true, launchStartup: false, alwaysOnTop: false, settingsInWindow: false, activityInWindow: false },
       groups: [
         { id: 'g1', name: 'A', slots: [null, cmd({ id: 'x' }), null, null] },
         { id: 'g2', name: 'B', slots: [cmd({ id: 'y', label: 'Y' }), null, null, null] }

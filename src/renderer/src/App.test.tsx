@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { StrictMode } from 'react';
 import { App } from './App';
 import { getDeck } from './lib/deck';
-import type { Button, DeckApi } from '@shared/types';
+import type { Button, DeckApi, DialogView } from '@shared/types';
 
 vi.mock('./lib/deck', async () => {
   const { createMockDeck } = await import('./lib/deck-mock');
@@ -20,6 +20,8 @@ async function seedConfig(slots: (Button | null)[] = []) {
   const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
   const cfg = await deck.getConfig();
   cfg.grid = { cols: 4, rows: 3 };
+  // Reset dialog-window flags so settings mutated by one test don't leak into the next.
+  cfg.settings = { ...cfg.settings, settingsInWindow: false, activityInWindow: false };
   const capacity = cfg.grid.cols * cfg.grid.rows;
   cfg.groups = [{ id: 'g1', name: 'Actions', slots: [...slots, ...Array(Math.max(0, capacity - slots.length)).fill(null)] }];
   await deck.saveConfig(cfg);
@@ -43,25 +45,37 @@ describe('App shell', () => {
     expect(screen.getByText('4×3')).toBeInTheDocument();
   });
 
-  it('clicking an empty slot opens the Add action modal; Esc closes it without confirmation', async () => {
+  it('opening the editor calls deck.openDialog instead of rendering an inline modal', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const openDialogSpy = vi.spyOn(deck, 'openDialog');
     render(<App />);
     await screen.findByText('Dev Server');
     fireEvent.click(document.querySelectorAll('.dp-key--empty')[0]);
-    expect(screen.getByText('Add action')).toBeInTheDocument();
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByText('Add action')).toBeNull();
+    await waitFor(() => expect(openDialogSpy).toHaveBeenCalledWith('edit', expect.objectContaining({ index: expect.any(Number), draft: expect.any(Object), accent: expect.any(String) })));
+    // No inline dialog node should be rendered
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    openDialogSpy.mockRestore();
   });
 
-  it('saving a new action persists it via deck.saveConfig', async () => {
+  it('saving a new action persists it via a dialog save message', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    // Capture the onDialogMessage callback so we can simulate a save from the dialog window
+    let dialogCb: ((m: { view: DialogView; message: unknown }) => void) | null = null;
+    const onDialogMessageSpy = vi.spyOn(deck, 'onDialogMessage').mockImplementation((cb) => {
+      dialogCb = cb;
+      return () => undefined;
+    });
     render(<App />);
     await screen.findByText('Dev Server');
-    fireEvent.click(document.querySelectorAll('.dp-key--empty')[0]);
-    fireEvent.change(screen.getByPlaceholderText('e.g. Dev Server'), { target: { value: 'Deploy' } });
-    fireEvent.change(screen.getByPlaceholderText('npm run dev'), { target: { value: './deploy.sh' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save action' }));
+    // Wait for the useEffect to subscribe before firing the callback
+    await waitFor(() => expect(dialogCb).not.toBeNull());
+    // Simulate the dialog window sending a save message
+    const newButton = { id: crypto.randomUUID(), label: 'Deploy', type: 'command' as const, command: './deploy.sh', icon: { kind: 'auto' as const } };
+    dialogCb!({ view: 'edit', message: { type: 'save', button: newButton, index: 1 } });
     await screen.findByText('Deploy');
-    const persisted = await getDeck().getConfig();
+    const persisted = await deck.getConfig();
     expect(persisted.groups[0].slots.filter(Boolean).map((b) => b!.label)).toContain('Deploy');
+    onDialogMessageSpy.mockRestore();
   });
 
   it('right-click on a filled key opens the context menu with Edit/Duplicate/Delete', async () => {
@@ -179,6 +193,124 @@ describe('App — save failure surfaces a toast', () => {
 
     // A toast (role="status") should appear instead of an unhandled rejection
     await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument());
+  });
+});
+
+describe('App — openEditor failure surfaces a toast', () => {
+  let openDialogSpy: MockInstance<DeckApi['openDialog']>;
+
+  beforeEach(async () => {
+    await seedConfig([button('b1', 'Dev Server')]);
+    openDialogSpy = vi.spyOn(getDeck(), 'openDialog');
+  });
+
+  afterEach(() => {
+    openDialogSpy.mockRestore();
+  });
+
+  it('clicking an empty key surfaces an info toast when openDialog rejects, with no unhandled rejection', async () => {
+    openDialogSpy.mockRejectedValueOnce(new Error('no main window'));
+    const unhandledHandler = vi.fn();
+    window.addEventListener('unhandledrejection', unhandledHandler);
+
+    render(<App />);
+    await screen.findByText('Dev Server');
+    fireEvent.click(document.querySelectorAll('.dp-key--empty')[0]);
+
+    expect(await screen.findByText('Could not open the editor')).toBeInTheDocument();
+    expect(unhandledHandler).not.toHaveBeenCalled();
+
+    window.removeEventListener('unhandledrejection', unhandledHandler);
+  });
+});
+
+describe('App — Settings window failure surfaces a toast', () => {
+  let openDialogSpy: MockInstance<DeckApi['openDialog']>;
+
+  beforeEach(async () => {
+    await seedConfig([]);
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, settingsInWindow: true };
+    await deck.saveConfig(cfg);
+    openDialogSpy = vi.spyOn(deck, 'openDialog');
+  });
+
+  afterEach(async () => {
+    openDialogSpy.mockRestore();
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, settingsInWindow: false };
+    await deck.saveConfig(cfg);
+  });
+
+  it('clicking the Settings button surfaces an info toast when openDialog rejects', async () => {
+    openDialogSpy.mockRejectedValueOnce(new Error('no main window'));
+
+    render(<App />);
+    await screen.findByText('DeckPad');
+    fireEvent.click(screen.getByTitle('Settings'));
+
+    expect(await screen.findByText('Could not open settings')).toBeInTheDocument();
+  });
+});
+
+describe('Toast — View log with activityInWindow', () => {
+  let onActionStateSpy: MockInstance<DeckApi['onActionState']>;
+  let openDialogSpy: MockInstance<DeckApi['openDialog']>;
+
+  beforeEach(async () => {
+    await seedConfig([button('btn1', 'MyAction')]);
+    // Enable activityInWindow so the window path is taken
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, activityInWindow: true };
+    await deck.saveConfig(cfg);
+  });
+
+  afterEach(async () => {
+    onActionStateSpy?.mockRestore();
+    openDialogSpy?.mockRestore();
+    // Restore activityInWindow to false so subsequent tests are not affected
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, activityInWindow: false };
+    await deck.saveConfig(cfg);
+  });
+
+  it('clicking View log opens the activity dialog window when activityInWindow is on', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    openDialogSpy = vi.spyOn(deck, 'openDialog');
+
+    // Intercept onActionState to capture the listener so we can emit a fake failure
+    let stateListener: ((e: import('@shared/types').ActionStateEvent) => void) | null = null;
+    onActionStateSpy = vi.spyOn(deck, 'onActionState').mockImplementation((cb) => {
+      stateListener = cb;
+      return () => { stateListener = null; };
+    });
+
+    render(<App />);
+    await screen.findByText('MyAction');
+
+    // Emit a failed exit event to produce a kind:'fail' toast with a "View log" button
+    await waitFor(() => expect(stateListener).not.toBeNull());
+    stateListener!({ type: 'exited', buttonId: 'btn1', code: 1, ranFor: 500 });
+
+    // Wait for the toast to appear
+    await screen.findByText('View log');
+
+    // Click "View log" on the toast
+    fireEvent.click(screen.getByText('View log'));
+
+    // Should have called openDialog with 'activity' payload
+    expect(openDialogSpy).toHaveBeenCalledWith('activity', expect.objectContaining({
+      items: expect.any(Array),
+      accent: expect.any(String),
+      surface: expect.any(String),
+    }));
+
+    // The inline activity panel must NOT be open
+    expect(document.querySelector('.dp-panel')).toBeNull();
   });
 });
 
@@ -470,6 +602,193 @@ describe('group tab reorder', () => {
   });
 });
 
+describe('App — activityInWindow pushes panelItems via updateDialog', () => {
+  let onActionStateSpy: MockInstance<DeckApi['onActionState']>;
+  let updateDialogSpy: MockInstance<DeckApi['updateDialog']>;
+
+  beforeEach(async () => {
+    await seedConfig([button('btn2', 'Watcher')]);
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, activityInWindow: true };
+    await deck.saveConfig(cfg);
+  });
+
+  afterEach(async () => {
+    onActionStateSpy?.mockRestore();
+    updateDialogSpy?.mockRestore();
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, activityInWindow: false };
+    await deck.saveConfig(cfg);
+  });
+
+  it('calls deck.updateDialog with activity and items when the window is open and an action outputs', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    updateDialogSpy = vi.spyOn(deck, 'updateDialog');
+
+    let stateListener: ((e: import('@shared/types').ActionStateEvent) => void) | null = null;
+    onActionStateSpy = vi.spyOn(deck, 'onActionState').mockImplementation((cb) => {
+      stateListener = cb;
+      return () => { stateListener = null; };
+    });
+
+    render(<App />);
+    await screen.findByText('Watcher');
+    await waitFor(() => expect(stateListener).not.toBeNull());
+
+    // Start the action so the pill appears
+    stateListener!({ type: 'started', buttonId: 'btn2', startedAt: Date.now() });
+
+    // Click the pill to open the Activity window (sets activityWindowOpenRef = true)
+    const pill = await screen.findByText(/running/);
+    fireEvent.click(pill);
+
+    // Now output arrives — panelItems changes and window IS open, so updateDialog must fire
+    stateListener!({ type: 'output', buttonId: 'btn2', chunk: 'hello\n' });
+
+    await waitFor(() =>
+      expect(updateDialogSpy).toHaveBeenCalledWith('activity', expect.objectContaining({
+        items: expect.arrayContaining([expect.objectContaining({ button: expect.objectContaining({ id: 'btn2' }) })]),
+      }))
+    );
+  });
+
+  it('gates updateDialog: does not push until openDialog is called, then stops after dialog-closed', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    updateDialogSpy = vi.spyOn(deck, 'updateDialog');
+    const openDialogSpy = vi.spyOn(deck, 'openDialog');
+
+    // Capture onDialogMessage callback so we can simulate the dialog-closed lifecycle message
+    let dialogCb: ((m: { view: DialogView; message: unknown }) => void) | null = null;
+    const onDialogMessageSpy = vi.spyOn(deck, 'onDialogMessage').mockImplementation((cb) => {
+      dialogCb = cb;
+      return () => undefined;
+    });
+
+    let stateListener: ((e: import('@shared/types').ActionStateEvent) => void) | null = null;
+    onActionStateSpy = vi.spyOn(deck, 'onActionState').mockImplementation((cb) => {
+      stateListener = cb;
+      return () => { stateListener = null; };
+    });
+
+    render(<App />);
+    await screen.findByText('Watcher');
+    await waitFor(() => expect(stateListener).not.toBeNull());
+    await waitFor(() => expect(dialogCb).not.toBeNull());
+
+    // --- Phase 1: window NOT open — panelItems change must NOT trigger updateDialog ---
+    updateDialogSpy.mockClear();
+    stateListener!({ type: 'started', buttonId: 'btn2', startedAt: Date.now() });
+    // Give React a render cycle to flush any effects
+    await new Promise((r) => setTimeout(r, 50));
+    expect(updateDialogSpy).not.toHaveBeenCalledWith('activity', expect.anything());
+
+    // --- Phase 2: open the Activity window via the pill (pill is visible because an action is running) ---
+    const pill = await screen.findByText(/running/);
+    fireEvent.click(pill);
+    // openDialog should have been called for 'activity'
+    expect(openDialogSpy).toHaveBeenCalledWith('activity', expect.anything());
+    updateDialogSpy.mockClear();
+    // Cause another panelItems change — now the window IS open, so updateDialog should fire
+    stateListener!({ type: 'output', buttonId: 'btn2', chunk: 'hello\n' });
+    await waitFor(() =>
+      expect(updateDialogSpy).toHaveBeenCalledWith('activity', expect.objectContaining({
+        items: expect.arrayContaining([expect.objectContaining({ button: expect.objectContaining({ id: 'btn2' }) })]),
+      }))
+    );
+
+    // --- Phase 3: simulate dialog-closed IPC from main ---
+    updateDialogSpy.mockClear();
+    dialogCb!({ view: 'activity', message: { type: 'dialog-closed' } });
+    // Cause another panelItems change — window is now closed, must NOT push
+    stateListener!({ type: 'output', buttonId: 'btn2', chunk: 'world\n' });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(updateDialogSpy).not.toHaveBeenCalledWith('activity', expect.anything());
+
+    onDialogMessageSpy.mockRestore();
+  });
+
+  it('keeps pushing to an open activity window after activityInWindow pref is toggled off', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    updateDialogSpy = vi.spyOn(deck, 'updateDialog');
+
+    let dialogCb: ((m: { view: DialogView; message: unknown }) => void) | null = null;
+    const onDialogMessageSpy = vi.spyOn(deck, 'onDialogMessage').mockImplementation((cb) => {
+      dialogCb = cb;
+      return () => undefined;
+    });
+
+    let stateListener: ((e: import('@shared/types').ActionStateEvent) => void) | null = null;
+    onActionStateSpy = vi.spyOn(deck, 'onActionState').mockImplementation((cb) => {
+      stateListener = cb;
+      return () => { stateListener = null; };
+    });
+
+    render(<App />);
+    await screen.findByText('Watcher');
+    await waitFor(() => expect(stateListener).not.toBeNull());
+    await waitFor(() => expect(dialogCb).not.toBeNull());
+
+    // Open the activity window (sets activityWindowOpenRef = true)
+    stateListener!({ type: 'started', buttonId: 'btn2', startedAt: Date.now() });
+    const pill = await screen.findByText(/running/);
+    fireEvent.click(pill);
+
+    // User toggles activityInWindow OFF via the settings-change path. Let the config
+    // re-render fully flush so the effect would observe the pref as false under old code.
+    dialogCb!({ view: 'settings', message: { type: 'settings-change', patch: { activityInWindow: false } } });
+    await new Promise((r) => setTimeout(r, 50));
+
+    // A new output arrives — the open window must still receive the update
+    updateDialogSpy.mockClear();
+    stateListener!({ type: 'output', buttonId: 'btn2', chunk: 'still live\n' });
+    await waitFor(() =>
+      expect(updateDialogSpy).toHaveBeenCalledWith('activity', expect.objectContaining({
+        items: expect.arrayContaining([expect.objectContaining({ button: expect.objectContaining({ id: 'btn2' }) })]),
+      }))
+    );
+
+    onDialogMessageSpy.mockRestore();
+  });
+
+  it('does not push updateDialog when openDialog rejects (ref stays false)', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    updateDialogSpy = vi.spyOn(deck, 'updateDialog');
+    const openDialogSpy = vi.spyOn(deck, 'openDialog').mockRejectedValue(new Error('teardown'));
+
+    let stateListener: ((e: import('@shared/types').ActionStateEvent) => void) | null = null;
+    onActionStateSpy = vi.spyOn(deck, 'onActionState').mockImplementation((cb) => {
+      stateListener = cb;
+      return () => { stateListener = null; };
+    });
+
+    render(<App />);
+    await screen.findByText('Watcher');
+    await waitFor(() => expect(stateListener).not.toBeNull());
+
+    // Start the action so the pill appears
+    stateListener!({ type: 'started', buttonId: 'btn2', startedAt: Date.now() });
+
+    // Click the pill — openDialog is invoked but REJECTS, so the ref must stay false
+    const pill = await screen.findByText(/running/);
+    fireEvent.click(pill);
+    expect(openDialogSpy).toHaveBeenCalledWith('activity', expect.anything());
+
+    // Flush the rejected-promise microtask so the .catch() runs
+    await vi.waitFor(() => expect(openDialogSpy).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Output arrives — but the window never opened, so updateDialog must NOT fire for 'activity'
+    updateDialogSpy.mockClear();
+    stateListener!({ type: 'output', buttonId: 'btn2', chunk: 'hello\n' });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(updateDialogSpy).not.toHaveBeenCalledWith('activity', expect.anything());
+
+    openDialogSpy.mockRestore();
+  });
+});
+
 describe('window chrome', () => {
   it('macOS: bar has is-mac padding class and no close button', async () => {
     render(<App />);
@@ -490,6 +809,151 @@ describe('window chrome', () => {
     expect(closeSpy).toHaveBeenCalled();
     closeSpy.mockRestore();
     Object.defineProperty(deck, 'platform', { value: original, configurable: true });
+  });
+});
+
+describe('toolbar focus', () => {
+  afterEach(async () => {
+    // Restore settingsInWindow to false so subsequent tests are not affected.
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, settingsInWindow: false };
+    await deck.saveConfig(cfg);
+  });
+
+  it('settings button blurs itself after opening dialog window', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    // Enable settingsInWindow so the window path is taken
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, settingsInWindow: true };
+    await deck.saveConfig(cfg);
+
+    render(<App />);
+    await screen.findByText('DeckPad');
+
+    const settingsBtn = screen.getByTitle('Settings');
+    settingsBtn.focus();
+    expect(document.activeElement).toBe(settingsBtn);
+
+    const blurSpy = vi.spyOn(settingsBtn, 'blur');
+    fireEvent.click(settingsBtn);
+
+    expect(blurSpy).toHaveBeenCalledTimes(1);
+    blurSpy.mockRestore();
+  });
+});
+
+describe('App — fast-path close and mount-while-open (PR review fixes)', () => {
+  beforeEach(async () => {
+    await seedConfig([]);
+  });
+
+  it('fast-path: clicking Settings button twice (inline mode) toggles closed and never calls openDialog', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const openDialogSpy = vi.spyOn(deck, 'openDialog');
+
+    render(<App />);
+    await screen.findByText('Actions');
+
+    // Open the settings sheet inline (settingsInWindow is false by default)
+    fireEvent.click(screen.getByTitle('Settings'));
+    await waitFor(() => expect(document.querySelector('.dp-sheet.is-open')).toBeTruthy());
+
+    // Click again — fast-path should close it WITHOUT calling openDialog
+    openDialogSpy.mockClear();
+    fireEvent.click(screen.getByTitle('Settings'));
+    await waitFor(() => expect(document.querySelector('.dp-sheet.is-open')).toBeNull());
+    expect(openDialogSpy).not.toHaveBeenCalled();
+
+    openDialogSpy.mockRestore();
+  });
+
+  it('fast-path (settingsInWindow): opens sheet inline, switches to window mode, next click closes not opens dialog', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const openDialogSpy = vi.spyOn(deck, 'openDialog');
+
+    render(<App />);
+    await screen.findByText('Actions');
+
+    // Step 1: open inline sheet (settingsInWindow: false → settingsOpen=true)
+    fireEvent.click(screen.getByTitle('Settings'));
+    await waitFor(() => expect(document.querySelector('.dp-sheet.is-open')).toBeTruthy());
+
+    // Step 2: enable "settingsInWindow" from within the open sheet via its ToggleRow.
+    // settingsInWindow is now true, but the inline sheet stays open (settingsOpen=true).
+    fireEvent.click(screen.getByText('Open Settings in its own window'));
+    await waitFor(() => expect(document.querySelector('.dp-sheet.is-open')).toBeTruthy());
+
+    // Step 3: click the Settings button — the fast-path must close the still-open inline
+    // sheet rather than calling openDialog, even though window mode is now selected.
+    openDialogSpy.mockClear();
+    fireEvent.click(screen.getByTitle('Settings'));
+    await waitFor(() => expect(document.querySelector('.dp-sheet.is-open')).toBeNull());
+    expect(openDialogSpy).not.toHaveBeenCalled();
+
+    openDialogSpy.mockRestore();
+  });
+
+  it('fast-path: activity pill click when panel already open closes panel (not openDialog)', async () => {
+    await seedConfig([button('bfp1', 'FastJob')]);
+
+    vi.useFakeTimers();
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const openDialogSpy = vi.spyOn(deck, 'openDialog');
+
+    render(<App />);
+    await vi.waitFor(() => expect(document.querySelector('.dp-key--filled')).toBeTruthy());
+
+    // Start the action (activityInWindow: false by default → inline panel)
+    fireEvent.click(document.querySelector('.dp-key--filled')!);
+    await vi.advanceTimersByTimeAsync(600); // mock deck: started at 200ms + 300ms reveal
+    const pill = screen.getByText(/running/);
+
+    // First click: opens the inline panel
+    openDialogSpy.mockClear();
+    fireEvent.click(pill);
+    await vi.waitFor(() => expect(document.querySelector('.dp-panel.is-open')).toBeTruthy());
+    expect(openDialogSpy).not.toHaveBeenCalled(); // inline mode → no dialog
+
+    // Second click: fast-path closes panel
+    fireEvent.click(pill);
+    await vi.waitFor(() => expect(document.querySelector('.dp-panel.is-open')).toBeNull());
+    expect(openDialogSpy).not.toHaveBeenCalled();
+
+    // Drain the mock's pending exit timer (200+1800=2000ms) so it doesn't leak.
+    await vi.advanceTimersByTimeAsync(2000);
+    vi.useRealTimers();
+    openDialogSpy.mockRestore();
+  });
+
+  it('mount-while-open: inline Settings stays in DOM when settingsInWindow is toggled on while sheet is open', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+
+    let dialogCb: ((m: { view: import('@shared/types').DialogView; message: unknown }) => void) | null = null;
+    const onDialogMessageSpy = vi.spyOn(deck, 'onDialogMessage').mockImplementation((cb) => {
+      dialogCb = cb;
+      return () => undefined;
+    });
+
+    render(<App />);
+    await screen.findByText('Actions');
+    await waitFor(() => expect(dialogCb).not.toBeNull());
+
+    // Open inline settings
+    fireEvent.click(screen.getByTitle('Settings'));
+    await waitFor(() => expect(document.querySelector('.dp-sheet.is-open')).toBeTruthy());
+
+    // Simulate settings-change from dialog that sets settingsInWindow: true
+    dialogCb!({ view: 'settings', message: { type: 'settings-change', patch: { settingsInWindow: true } } });
+
+    // Give React a render cycle
+    await waitFor(() => {
+      // After fix: (!settingsInWindow || settingsOpen) = (!true || true) = true → still mounted
+      // Before fix: !settingsInWindow = false → unmounted immediately
+      expect(document.querySelector('.dp-sheet')).toBeTruthy();
+    });
+
+    onDialogMessageSpy.mockRestore();
   });
 });
 

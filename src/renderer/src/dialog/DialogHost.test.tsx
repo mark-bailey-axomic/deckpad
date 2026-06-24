@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import type { DeckApi } from '@shared/types';
 import { DialogHost } from './DialogHost';
@@ -49,6 +49,10 @@ const emptyActivityPayload: ActivityPayload = {
 };
 
 describe('DialogHost', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('fetches its payload and renders the edit view', async () => {
     const deck = mockDeck(editPayload);
     render(<DialogHost view="edit" id="id-1" deck={deck} />);
@@ -183,6 +187,39 @@ describe('DialogHost', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
 
     expect(deck.closeDialog).toHaveBeenCalledWith('id-esc');
+  });
+
+  it('falls back to window.close() when closeDialog rejects on cancel', async () => {
+    const deck = mockDeck(editPayload);
+    (deck.closeDialog as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('main tearing down'));
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {});
+
+    render(<DialogHost view="edit" id="id-close-fail" deck={deck} />);
+    await waitFor(() => screen.getByDisplayValue('Hello'));
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(deck.closeDialog).toHaveBeenCalledWith('id-close-fail');
+      expect(closeSpy).toHaveBeenCalled();
+    });
+  });
+
+  it('save flow falls back to window.close() when closeDialog rejects after a successful send', async () => {
+    const deck = mockDeck(editPayload);
+    (deck.closeDialog as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('main tearing down'));
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {});
+
+    render(<DialogHost view="edit" id="id-save-close-fail" deck={deck} />);
+    await waitFor(() => screen.getByDisplayValue('Hello'));
+
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(deck.sendDialogMessage).toHaveBeenCalledWith('id-save-close-fail', expect.objectContaining({ type: 'save', index: 3 }));
+      expect(deck.closeDialog).toHaveBeenCalledWith('id-save-close-fail');
+      expect(closeSpy).toHaveBeenCalled();
+    });
   });
 
   it('activity view re-renders live when onDialogUpdate fires', async () => {

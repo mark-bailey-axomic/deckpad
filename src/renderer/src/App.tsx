@@ -13,7 +13,7 @@ import { newDraft, type ModalDraft } from './components/EditModal';
 import { ActivityPanel, type ActivityItem } from './components/ActivityPanel';
 import { Settings, type SettingsValues } from './components/Settings';
 import { Stepper } from './components/Stepper';
-import type { DialogMessage } from './dialog/messages';
+import type { DialogWireMessage } from './dialog/messages';
 
 const deck = getDeck();
 
@@ -283,11 +283,11 @@ export function App(): ReactElement | null {
 
   // Wire up the dialog message handler with current-scope functions (runs on every render but ref assignment is cheap).
   dialogMessageHandlerRef.current = ({ view, message }) => {
-    if (view === 'activity' && (message as { type?: string }).type === 'dialog-closed') {
+    const m = message as DialogWireMessage;
+    if (view === 'activity' && m.type === 'dialog-closed') {
       activityWindowOpenRef.current = false;
       return;
     }
-    const m = message as DialogMessage;
     if (view === 'edit' && m.type === 'save') {
       setSlots((slots) => slots.map((s, i) => (i === m.index ? m.button : s)));
     } else if (view === 'settings' && m.type === 'settings-change') {

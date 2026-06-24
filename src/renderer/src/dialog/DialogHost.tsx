@@ -46,7 +46,7 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
   if (payload === undefined) return null;
 
   const send = (message: DialogMessage) => { void deck.sendDialogMessage(id, message).catch(() => setFailed(true)); };
-  const close = () => { void deck.closeDialog(id).catch(() => undefined); };
+  const close = () => { void deck.closeDialog(id).catch(() => window.close()); };
   const sendThenClose = async (message: DialogMessage) => {
     try {
       await deck.sendDialogMessage(id, message);
@@ -54,7 +54,7 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
       setFailed(true);
       return;
     }
-    await deck.closeDialog(id).catch(() => undefined);
+    await deck.closeDialog(id).catch(() => window.close());
   };
 
   const accent = (payload as { accent: string }).accent;

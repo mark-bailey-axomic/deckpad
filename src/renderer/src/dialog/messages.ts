@@ -13,3 +13,9 @@ export type DialogMessage =
   | { type: 'save'; button: Button; index: number }   // edit
   | { type: 'settings-change'; patch: Partial<SettingsValues> }
   | { type: 'activity-stop'; buttonId: string };
+
+// Lifecycle messages injected by the main process (not originated by the dialog renderer).
+export type DialogLifecycleMessage = { type: 'dialog-closed' };
+
+// Anything the main window's dialog-message handler may receive over the wire.
+export type DialogWireMessage = DialogMessage | DialogLifecycleMessage;

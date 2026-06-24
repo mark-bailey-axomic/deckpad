@@ -42,6 +42,18 @@ describe('isValidPayload', () => {
     expect(isValidPayload('activity', { items: [], accent: '#fff', surface: 'near-black' })).toBe(false);
   });
 
+  it('rejects an edit payload whose draft is not an object', () => {
+    expect(isValidPayload('edit', { draft: 'x', index: 0, accent: '#fff', surface: 'near-black' })).toBe(false);
+  });
+
+  it('rejects an edit payload whose draft is an array', () => {
+    expect(isValidPayload('edit', { draft: [], index: 0, accent: '#fff', surface: 'near-black' })).toBe(false);
+  });
+
+  it('rejects a settings payload whose settings is an array', () => {
+    expect(isValidPayload('settings', { settings: [], accent: '#fff', surface: 'near-black' })).toBe(false);
+  });
+
   it('rejects null and non-object values', () => {
     expect(isValidPayload('edit', null)).toBe(false);
     expect(isValidPayload('edit', undefined)).toBe(false);

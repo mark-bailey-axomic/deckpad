@@ -20,14 +20,18 @@ export type DialogLifecycleMessage = { type: 'dialog-closed' };
 // Anything the main window's dialog-message handler may receive over the wire.
 export type DialogWireMessage = DialogMessage | DialogLifecycleMessage;
 
+/** Plain non-null, non-array object — arrays pass `typeof === 'object'` so exclude them explicitly. */
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
 /** Runtime check that a payload structurally matches its routed view (guards tampered/mismatched URLs). */
 export function isValidPayload(view: DialogView, p: unknown): boolean {
-  if (typeof p !== 'object' || p === null) return false;
-  const o = p as Record<string, unknown>;
-  if (typeof o.accent !== 'string' || typeof o.surface !== 'string') return false;
+  if (!isObject(p)) return false;
+  if (typeof p.accent !== 'string' || typeof p.surface !== 'string') return false;
   switch (view) {
-    case 'edit': return 'draft' in o && typeof o.index === 'number';
-    case 'settings': return typeof o.settings === 'object' && o.settings !== null;
-    case 'activity': return Array.isArray(o.items) && typeof o.now === 'number';
+    case 'edit': return isObject(p.draft) && typeof p.index === 'number';
+    case 'settings': return isObject(p.settings);
+    case 'activity': return Array.isArray(p.items) && typeof p.now === 'number';
   }
 }

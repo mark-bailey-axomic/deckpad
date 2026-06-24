@@ -30,6 +30,17 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
     return deck.onDialogUpdate((p) => { if (p != null) setPayload(p); });
   }, [deck]);
 
+  // Frameless dialog windows have no native Escape handling — close best-effort via IPC,
+  // falling back to window.close(). Placed with the other hooks (above early returns) so it
+  // works even in the failed/fallback state.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') deck.closeDialog(id).catch(() => window.close());
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [deck, id]);
+
   if (failed) return <DialogFallback message="Dialog unavailable." />;
 
   if (payload === undefined) return null;

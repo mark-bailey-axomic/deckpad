@@ -199,7 +199,8 @@ export function App(): ReactElement | null {
   };
 
   const openEditor = (draft: ModalDraft, index: number) =>
-    void deck.openDialog('edit', { draft, index, accent, surface: config.settings.surface });
+    deck.openDialog('edit', { draft, index, accent, surface: config.settings.surface })
+      .catch(() => showToast({ kind: 'info', message: 'Could not open the editor' }));
 
   const pressKey = (idx: number) => {
     const b = group.slots[idx];
@@ -356,7 +357,8 @@ export function App(): ReactElement | null {
             if (settingsOpen) { setSettingsOpen(false); return; }
             if (config.settings.settingsInWindow) {
               const btn = e.currentTarget;
-              void deck.openDialog('settings', { settings: settingsValues, accent, surface: config.settings.surface });
+              deck.openDialog('settings', { settings: settingsValues, accent, surface: config.settings.surface })
+                .catch(() => showToast({ kind: 'info', message: 'Could not open settings' }));
               btn.blur();
             } else setSettingsOpen((o) => !o);
           }} title="Settings">

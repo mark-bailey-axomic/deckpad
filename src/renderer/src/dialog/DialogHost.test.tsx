@@ -175,6 +175,16 @@ describe('DialogHost', () => {
     expect(await screen.findByDisplayValue('NewLabel')).toBeInTheDocument();
   });
 
+  it('pressing Escape closes the dialog via deck.closeDialog with the dialog id', async () => {
+    const deck = mockDeck(editPayload);
+    render(<DialogHost view="edit" id="id-esc" deck={deck} />);
+    await waitFor(() => screen.getByDisplayValue('Hello'));
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(deck.closeDialog).toHaveBeenCalledWith('id-esc');
+  });
+
   it('activity view re-renders live when onDialogUpdate fires', async () => {
     const { deck, fireUpdate } = mockDeckWithUpdateCapture(emptyActivityPayload);
     render(<DialogHost view="activity" id="id-a" deck={deck} />);

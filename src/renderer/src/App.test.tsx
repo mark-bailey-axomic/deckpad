@@ -196,6 +196,65 @@ describe('App — save failure surfaces a toast', () => {
   });
 });
 
+describe('App — openEditor failure surfaces a toast', () => {
+  let openDialogSpy: MockInstance<DeckApi['openDialog']>;
+
+  beforeEach(async () => {
+    await seedConfig([button('b1', 'Dev Server')]);
+    openDialogSpy = vi.spyOn(getDeck(), 'openDialog');
+  });
+
+  afterEach(() => {
+    openDialogSpy.mockRestore();
+  });
+
+  it('clicking an empty key surfaces an info toast when openDialog rejects, with no unhandled rejection', async () => {
+    openDialogSpy.mockRejectedValueOnce(new Error('no main window'));
+    const unhandledHandler = vi.fn();
+    window.addEventListener('unhandledrejection', unhandledHandler);
+
+    render(<App />);
+    await screen.findByText('Dev Server');
+    fireEvent.click(document.querySelectorAll('.dp-key--empty')[0]);
+
+    expect(await screen.findByText('Could not open the editor')).toBeInTheDocument();
+    expect(unhandledHandler).not.toHaveBeenCalled();
+
+    window.removeEventListener('unhandledrejection', unhandledHandler);
+  });
+});
+
+describe('App — Settings window failure surfaces a toast', () => {
+  let openDialogSpy: MockInstance<DeckApi['openDialog']>;
+
+  beforeEach(async () => {
+    await seedConfig([]);
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, settingsInWindow: true };
+    await deck.saveConfig(cfg);
+    openDialogSpy = vi.spyOn(deck, 'openDialog');
+  });
+
+  afterEach(async () => {
+    openDialogSpy.mockRestore();
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    const cfg = await deck.getConfig();
+    cfg.settings = { ...cfg.settings, settingsInWindow: false };
+    await deck.saveConfig(cfg);
+  });
+
+  it('clicking the Settings button surfaces an info toast when openDialog rejects', async () => {
+    openDialogSpy.mockRejectedValueOnce(new Error('no main window'));
+
+    render(<App />);
+    await screen.findByText('DeckPad');
+    fireEvent.click(screen.getByTitle('Settings'));
+
+    expect(await screen.findByText('Could not open settings')).toBeInTheDocument();
+  });
+});
+
 describe('Toast — View log with activityInWindow', () => {
   let onActionStateSpy: MockInstance<DeckApi['onActionState']>;
   let openDialogSpy: MockInstance<DeckApi['openDialog']>;

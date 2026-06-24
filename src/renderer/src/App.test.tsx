@@ -649,6 +649,42 @@ describe('App — activityInWindow pushes panelItems via updateDialog', () => {
 
     onDialogMessageSpy.mockRestore();
   });
+
+  it('does not push updateDialog when openDialog rejects (ref stays false)', async () => {
+    const deck = getDeck() as ReturnType<typeof import('./lib/deck-mock').createMockDeck>;
+    updateDialogSpy = vi.spyOn(deck, 'updateDialog');
+    const openDialogSpy = vi.spyOn(deck, 'openDialog').mockRejectedValue(new Error('teardown'));
+
+    let stateListener: ((e: import('@shared/types').ActionStateEvent) => void) | null = null;
+    onActionStateSpy = vi.spyOn(deck, 'onActionState').mockImplementation((cb) => {
+      stateListener = cb;
+      return () => { stateListener = null; };
+    });
+
+    render(<App />);
+    await screen.findByText('Watcher');
+    await waitFor(() => expect(stateListener).not.toBeNull());
+
+    // Start the action so the pill appears
+    stateListener!({ type: 'started', buttonId: 'btn2', startedAt: Date.now() });
+
+    // Click the pill — openDialog is invoked but REJECTS, so the ref must stay false
+    const pill = await screen.findByText(/running/);
+    fireEvent.click(pill);
+    expect(openDialogSpy).toHaveBeenCalledWith('activity', expect.anything());
+
+    // Flush the rejected-promise microtask so the .catch() runs
+    await vi.waitFor(() => expect(openDialogSpy).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Output arrives — but the window never opened, so updateDialog must NOT fire for 'activity'
+    updateDialogSpy.mockClear();
+    stateListener!({ type: 'output', buttonId: 'btn2', chunk: 'hello\n' });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(updateDialogSpy).not.toHaveBeenCalledWith('activity', expect.anything());
+
+    openDialogSpy.mockRestore();
+  });
 });
 
 describe('window chrome', () => {

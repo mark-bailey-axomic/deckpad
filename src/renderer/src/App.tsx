@@ -318,8 +318,9 @@ export function App(): ReactElement | null {
             if (panelOpen) { setPanelOpen(false); return; }
             if (config.settings.activityInWindow) {
               const btn = e.currentTarget;
-              void deck.openDialog('activity', { items: panelItems, now, accent, surface: config.settings.surface });
-              activityWindowOpenRef.current = true;
+              deck.openDialog('activity', { items: panelItems, now, accent, surface: config.settings.surface })
+                .then(() => { activityWindowOpenRef.current = true; })
+                .catch(() => { activityWindowOpenRef.current = false; });
               btn.blur();
             } else setPanelOpen((o) => !o);
           }}>
@@ -447,8 +448,9 @@ export function App(): ReactElement | null {
       <div className="dp-toast-layer">
         <Toast toast={toast} onView={() => {
           if (config?.settings.activityInWindow) {
-            void deck.openDialog('activity', { items: panelItems, now, accent, surface: config.settings.surface });
-            activityWindowOpenRef.current = true;
+            deck.openDialog('activity', { items: panelItems, now, accent, surface: config.settings.surface })
+              .then(() => { activityWindowOpenRef.current = true; })
+              .catch(() => { activityWindowOpenRef.current = false; });
           } else {
             setPanelOpen(true);
           }

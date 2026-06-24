@@ -1,4 +1,4 @@
-import type { Button, Surface } from '@shared/types';
+import type { Button, DialogView, Surface } from '@shared/types';
 import type { ModalDraft } from '../components/EditModal';
 import type { SettingsValues } from '../components/Settings';
 import type { ActivityItem } from '../components/ActivityPanel';
@@ -19,3 +19,14 @@ export type DialogLifecycleMessage = { type: 'dialog-closed' };
 
 // Anything the main window's dialog-message handler may receive over the wire.
 export type DialogWireMessage = DialogMessage | DialogLifecycleMessage;
+
+/** Runtime check that a payload structurally matches its routed view (guards tampered/mismatched URLs). */
+export function isValidPayload(view: DialogView, p: unknown): boolean {
+  if (typeof p !== 'object' || p === null) return false;
+  const o = p as Record<string, unknown>;
+  switch (view) {
+    case 'edit': return 'draft' in o && typeof o.index === 'number';
+    case 'settings': return typeof o.settings === 'object' && o.settings !== null;
+    case 'activity': return Array.isArray(o.items);
+  }
+}

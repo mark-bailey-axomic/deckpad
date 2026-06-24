@@ -6,6 +6,7 @@ import { Settings } from '../components/Settings';
 import type { SettingsValues } from '../components/Settings';
 import { ActivityPanel } from '../components/ActivityPanel';
 import type { EditPayload, SettingsPayload, ActivityPayload, DialogMessage } from './messages';
+import { isValidPayload } from './messages';
 import { DialogFallback } from './DialogFallback';
 
 interface Props {
@@ -21,14 +22,14 @@ export function DialogHost({ view, id, deck }: Props): ReactElement | null {
 
   useEffect(() => {
     deck.getDialogPayload(id)
-      .then((p) => { if (p == null) setFailed(true); else setPayload(p); })
+      .then((p) => { if (p == null || !isValidPayload(view, p)) setFailed(true); else setPayload(p); })
       .catch(() => setFailed(true));
-  }, [deck, id]);
+  }, [deck, id, view]);
 
   // Any dialog window accepts payload refreshes: live activity updates + dedup/focus re-open.
   useEffect(() => {
-    return deck.onDialogUpdate((p) => { if (p != null) setPayload(p); });
-  }, [deck]);
+    return deck.onDialogUpdate((p) => { if (p != null && isValidPayload(view, p)) setPayload(p); });
+  }, [deck, view]);
 
   // Frameless dialog windows have no native Escape handling — close best-effort via IPC,
   // falling back to window.close(). Placed with the other hooks (above early returns) so it

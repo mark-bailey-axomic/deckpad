@@ -60,14 +60,13 @@ describe('DialogHost', () => {
     await waitFor(() => expect(screen.getByDisplayValue('Hello')).toBeInTheDocument());
   });
 
-  it('renders nothing for an unknown view', async () => {
-    const { container } = render(
+  it('renders the fallback for an unknown view (payload cannot match any known view)', async () => {
+    // isValidPayload only recognizes edit/settings/activity, so an unknown/tampered view
+    // never validates and routes to the safe fallback rather than crashing or rendering an empty shell.
+    render(
       <DialogHost view={'unknown' as unknown as import('@shared/types').DialogView} id="id-x" deck={mockDeck({ accent: '#000000', surface: 'near-black' })} />
     );
-    // Wait for getDialogPayload to resolve so the dp-dialog-window div is present.
-    await waitFor(() => expect(container.querySelector('.dp-dialog-window')).not.toBeNull());
-    // The wrapper must be present but must contain no child elements — no modal/settings/activity rendered.
-    expect(container.querySelector('.dp-dialog-window')!.children).toHaveLength(0);
+    expect(await screen.findByText(/dialog unavailable/i)).toBeInTheDocument();
   });
 
   it('save sends a save message then asks to close', async () => {
@@ -220,6 +219,17 @@ describe('DialogHost', () => {
       expect(deck.closeDialog).toHaveBeenCalledWith('id-save-close-fail');
       expect(closeSpy).toHaveBeenCalled();
     });
+  });
+
+  it('settings view with a mismatched edit-shaped payload renders the fallback and does not throw', async () => {
+    // Simulates a tampered/mismatched URL: routed to settings but given an edit payload.
+    const mismatched = { draft: { ...editPayload.draft }, index: 0, accent: '#fff', surface: 'near-black' };
+    const deck = mockDeck(mismatched);
+    render(<DialogHost view="settings" id="id-mismatch" deck={deck} />);
+    expect(await screen.findByText(/dialog unavailable/i)).toBeInTheDocument();
+    // No settings UI rendered.
+    expect(screen.queryByText('Show labels')).toBeNull();
+    expect(screen.queryByRole('button', { name: /show labels/i })).toBeNull();
   });
 
   it('activity view re-renders live when onDialogUpdate fires', async () => {

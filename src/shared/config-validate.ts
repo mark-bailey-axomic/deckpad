@@ -1,7 +1,8 @@
 import { BUTTON_ID_RE, GRID_LIMITS, SURFACES } from './constants';
 import type { Config } from './types';
 
-const VALID_BUTTON_TYPES = new Set(['command', 'file', 'app']);
+const VALID_BUTTON_TYPES = new Set(['command', 'script']);
+const VALID_SCRIPT_LANGUAGES = new Set(['javascript', 'typescript', 'python', 'sh']);
 const VALID_ICON_KINDS = new Set(['auto', 'letter', 'emoji', 'image']);
 const VALID_SURFACES = new Set(Object.keys(SURFACES));
 
@@ -22,14 +23,22 @@ function validateButton(slot: unknown): boolean {
   // Optional field type checks
   if ('command' in slot && typeof slot['command'] !== 'string') return false;
   if ('cwd' in slot && typeof slot['cwd'] !== 'string') return false;
-  if ('path' in slot && typeof slot['path'] !== 'string') return false;
   if ('showTerminal' in slot && typeof slot['showTerminal'] !== 'boolean') return false;
+  if ('script' in slot && typeof slot['script'] !== 'string') return false;
+  if ('language' in slot && !VALID_SCRIPT_LANGUAGES.has(slot['language'] as string)) return false;
   if ('emoji' in icon && typeof icon['emoji'] !== 'string') return false;
   if ('tileColor' in icon && typeof icon['tileColor'] !== 'string') return false;
   if ('sourcePath' in icon && typeof icon['sourcePath'] !== 'string') return false;
 
-  // Payload fields stay optional: the modal allows saving before a path/command
-  // is chosen, so requiredness is UX territory — the runner must handle absence.
+  // Script buttons must carry a runnable body + known language (UX guarantees this;
+  // the guard makes it a hard invariant). Command stays lenient per the note below.
+  if (type === 'script') {
+    if (!VALID_SCRIPT_LANGUAGES.has(slot['language'] as string)) return false;
+    if (typeof slot['script'] !== 'string' || slot['script'].length === 0) return false;
+  }
+
+  // Payload fields stay optional for command: the modal allows saving before a
+  // command is chosen, so requiredness is UX territory — the runner handles absence.
   return true;
 }
 

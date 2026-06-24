@@ -49,8 +49,10 @@ describe('EditModal', () => {
     const draft = { ...newDraft(), type: 'script' as const, label: 'B', script: 'a' };
     render(<EditModal {...baseProps} open draft={draft} />);
     const ta = screen.getByPlaceholderText(/write your script/i) as HTMLTextAreaElement;
+    ta.focus();
     ta.setSelectionRange(1, 1);
     fireEvent.keyDown(ta, { key: 'Tab' });
     expect(ta.value).toBe('a  ');
+    expect(document.activeElement).toBe(ta);
   });
 });

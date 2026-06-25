@@ -45,6 +45,16 @@ describe('EditModal', () => {
     expect('isNew' in saved).toBe(false);
   });
 
+  it('persists the working directory for a script button', () => {
+    const onSave = vi.fn();
+    const draft = { ...newDraft(), type: 'script' as const, label: 'Build', language: 'sh' as const, script: 'echo hi' };
+    render(<EditModal {...baseProps} onSave={onSave} open draft={draft} />);
+    fireEvent.change(screen.getByPlaceholderText('~/dev/acme-web'), { target: { value: '/tmp/proj' } });
+    fireEvent.click(screen.getByText('Save action'));
+    const saved = onSave.mock.calls[0][0];
+    expect(saved.cwd).toBe('/tmp/proj');
+  });
+
   it('Tab in the script body inserts two spaces instead of moving focus', () => {
     const draft = { ...newDraft(), type: 'script' as const, label: 'B', script: 'a' };
     render(<EditModal {...baseProps} open draft={draft} />);

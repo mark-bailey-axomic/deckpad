@@ -34,7 +34,7 @@ function validateButton(slot: unknown): boolean {
   // the guard makes it a hard invariant). Command stays lenient per the note below.
   if (type === 'script') {
     if (!VALID_SCRIPT_LANGUAGES.has(slot['language'] as string)) return false;
-    if (typeof slot['script'] !== 'string' || slot['script'].length === 0) return false;
+    if (typeof slot['script'] !== 'string' || slot['script'].trim().length === 0) return false;
   }
 
   // Payload fields stay optional for command: the modal allows saving before a

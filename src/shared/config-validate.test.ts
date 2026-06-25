@@ -353,6 +353,14 @@ describe('validateConfig', () => {
     expect(validateConfig(cfg)).toBe(false);
   });
 
+  it('rejects a script button whose body is only whitespace', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1', label: 'Build', type: 'script', language: 'sh', script: '   \n\t', icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
   it('rejects a button with the removed "file" type', () => {
     const cfg = defaultConfig() as any;
     cfg.groups[0].slots[0] = {

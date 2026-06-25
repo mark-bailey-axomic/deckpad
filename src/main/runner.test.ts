@@ -61,6 +61,29 @@ describe('Runner.run', () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
+  it('emits a started→failed pair (not a throw) when resolve throws synchronously', () => {
+    const resolve = vi.fn(() => { throw new Error('temp write failed'); });
+    const r = new Runner({ spawn: spawn as never, send: (e) => events.push(e), platform: 'darwin', kill, resolve });
+    expect(() => r.run(button({ id: 'sc', type: 'script' }))).not.toThrow();
+    expect(events).toEqual([
+      { type: 'started', buttonId: 'sc', startedAt: 10_000 },
+      { type: 'exited', buttonId: 'sc', code: -1, ranFor: 0 }
+    ]);
+    expect(r.isRunning('sc')).toBe(false);
+  });
+
+  it('cleans up the spec temp file and fails the run when spawn throws synchronously', () => {
+    const cleanup = vi.fn();
+    const resolve = vi.fn(() => ({ file: '/bin/zsh', args: ['-lc', 'node "/tmp/x.js"'], shell: false, cleanup }));
+    const throwingSpawn = vi.fn(() => { throw new Error('ENOENT'); });
+    const r = new Runner({ spawn: throwingSpawn as never, send: (e) => events.push(e), platform: 'darwin', kill, resolve });
+    expect(() => r.run(button({ id: 'sc', type: 'script' }))).not.toThrow();
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(events.map((e) => e.type)).toEqual(['started', 'exited']);
+    expect(events.at(-1)).toMatchObject({ type: 'exited', buttonId: 'sc', code: -1 });
+    expect(r.isRunning('sc')).toBe(false);
+  });
+
   it('batches stdout+stderr into output events (~50 ms)', () => {
     runner.run(button());
     child.stdout.emit('data', Buffer.from('out1\n'));

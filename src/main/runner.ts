@@ -82,47 +82,63 @@ export class Runner {
     }
     const id = button.id;
     const startedAt = Date.now();
-    const output = new RingBuffer(OUTPUT_RING_CAPACITY);
-    const batcher = new OutputBatcher(OUTPUT_BATCH_MS, (chunk) => {
-      // pushAll caps a firehose flush to the ring capacity without spreading huge arrays.
-      output.pushAll(chunk.split('\n').filter((l) => l.length > 0));
-      this.send({ type: 'output', buttonId: id, chunk });
-    });
 
-    const spec = this.resolve(button);
-    const child = this.spawn(spec.file, spec.args, {
-      shell: spec.shell,
-      cwd: button.cwd || undefined,
-      detached: this.platform !== 'win32'
-    });
+    // resolve() (script temp-file write) and spawn() can throw synchronously. A throw
+    // here must not crash the main process or strand the renderer in "launching" with
+    // no exit event — so catch it, clean up any temp file the spec created, and emit a
+    // started→failed pair so the key resolves to a failed state.
+    let spec: ResolvedSpawn | undefined;
+    try {
+      spec = this.resolve(button);
+      const child = this.spawn(spec.file, spec.args, {
+        shell: spec.shell,
+        cwd: button.cwd || undefined,
+        detached: this.platform !== 'win32'
+      });
 
-    this.runs.set(id, { child, startedAt, output, batcher, cleanup: spec.cleanup });
-    this.send({ type: 'started', buttonId: id, startedAt });
+      const output = new RingBuffer(OUTPUT_RING_CAPACITY);
+      const batcher = new OutputBatcher(OUTPUT_BATCH_MS, (chunk) => {
+        // pushAll caps a firehose flush to the ring capacity without spreading huge arrays.
+        output.pushAll(chunk.split('\n').filter((l) => l.length > 0));
+        this.send({ type: 'output', buttonId: id, chunk });
+      });
 
-    child.stdout?.on('data', (d: Buffer) => batcher.push(d.toString()));
-    child.stderr?.on('data', (d: Buffer) => batcher.push(d.toString()));
-    child.on('error', (err: Error) => {
-      batcher.push(`${err.message}\n`);
-      this.finish(id, -1); // spec: spawn error treated as exit -1
-    });
-    child.on('exit', (code: number | null) => {
-      const run = this.runs.get(id);
-      if (!run) return; // already finished (error path)
-      const exitCode = code ?? -1;
-      if (exitCode !== 0 || run.batcher.hasPending()) {
-        // Failure/signal exits (and exits with output already in hand) deliver immediately.
-        this.finish(id, exitCode);
-        return;
+      this.runs.set(id, { child, startedAt, output, batcher, cleanup: spec.cleanup });
+      this.send({ type: 'started', buttonId: id, startedAt });
+
+      child.stdout?.on('data', (d: Buffer) => batcher.push(d.toString()));
+      child.stderr?.on('data', (d: Buffer) => batcher.push(d.toString()));
+      child.on('error', (err: Error) => {
+        batcher.push(`${err.message}\n`);
+        this.finish(id, -1); // spec: spawn error treated as exit -1
+      });
+      child.on('exit', (code: number | null) => {
+        const run = this.runs.get(id);
+        if (!run) return; // already finished (error path)
+        const exitCode = code ?? -1;
+        if (exitCode !== 0 || run.batcher.hasPending()) {
+          // Failure/signal exits (and exits with output already in hand) deliver immediately.
+          this.finish(id, exitCode);
+          return;
+        }
+        // Clean, quiet exit: defer to 'close' so draining stdio is flushed BEFORE 'exited'.
+        run.exitCode = exitCode;
+        run.batcher.hold();
+      });
+      child.on('close', (code: number | null) => {
+        const run = this.runs.get(id);
+        if (!run) return; // double-fire guard (error/exit already finished the run)
+        this.finish(id, run.exitCode ?? code ?? -1);
+      });
+    } catch {
+      try {
+        spec?.cleanup?.(); // remove the temp file if the spec was created before spawn threw
+      } catch {
+        // temp file may not exist yet — nothing actionable
       }
-      // Clean, quiet exit: defer to 'close' so draining stdio is flushed BEFORE 'exited'.
-      run.exitCode = exitCode;
-      run.batcher.hold();
-    });
-    child.on('close', (code: number | null) => {
-      const run = this.runs.get(id);
-      if (!run) return; // double-fire guard (error/exit already finished the run)
-      this.finish(id, run.exitCode ?? code ?? -1);
-    });
+      this.send({ type: 'started', buttonId: id, startedAt });
+      this.send({ type: 'exited', buttonId: id, code: -1, ranFor: Date.now() - startedAt });
+    }
   }
 
   private finish(id: string, code: number): void {

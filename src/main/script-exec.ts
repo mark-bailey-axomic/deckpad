@@ -70,9 +70,10 @@ export function resolveScriptSpawn(button: Button, deps: ScriptExecDeps): Resolv
   if (deps.platform === 'win32') {
     return { file: inner, args: [], shell: true, cleanup };
   }
-  // POSIX GUI apps get a minimal PATH; a login shell restores the terminal's PATH.
-  // `-l` (login) isn't portable to plain POSIX sh/dash, so only use `-lc` for real
-  // login shells (zsh/bash/fish); fall back to `-c` for a bare `sh`.
+  // POSIX GUI apps get a minimal PATH; running through the user's shell as a login
+  // shell (`-l`) sources their profile so PATH matches their terminal. Only a shell
+  // invoked as bare `sh` is downgraded to `-c`, since POSIX `sh` is not guaranteed to
+  // accept `-l` (any shell named otherwise — zsh/bash/dash/ksh/fish — gets `-lc`).
   const shellPath = deps.shell();
   const flag = basename(shellPath) === 'sh' ? '-c' : '-lc';
   return { file: shellPath, args: [flag, inner], shell: false, cleanup };

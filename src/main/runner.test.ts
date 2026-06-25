@@ -67,6 +67,7 @@ describe('Runner.run', () => {
     expect(() => r.run(button({ id: 'sc', type: 'script' }))).not.toThrow();
     expect(events).toEqual([
       { type: 'started', buttonId: 'sc', startedAt: 10_000 },
+      { type: 'output', buttonId: 'sc', chunk: 'temp write failed\n' },
       { type: 'exited', buttonId: 'sc', code: -1, ranFor: 0 }
     ]);
     expect(r.isRunning('sc')).toBe(false);
@@ -79,7 +80,8 @@ describe('Runner.run', () => {
     const r = new Runner({ spawn: throwingSpawn as never, send: (e) => events.push(e), platform: 'darwin', kill, resolve });
     expect(() => r.run(button({ id: 'sc', type: 'script' }))).not.toThrow();
     expect(cleanup).toHaveBeenCalledTimes(1);
-    expect(events.map((e) => e.type)).toEqual(['started', 'exited']);
+    expect(events.map((e) => e.type)).toEqual(['started', 'output', 'exited']);
+    expect(events[1]).toMatchObject({ type: 'output', buttonId: 'sc', chunk: 'ENOENT\n' });
     expect(events.at(-1)).toMatchObject({ type: 'exited', buttonId: 'sc', code: -1 });
     expect(r.isRunning('sc')).toBe(false);
   });

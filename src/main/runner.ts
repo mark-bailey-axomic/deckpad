@@ -130,13 +130,17 @@ export class Runner {
         if (!run) return; // double-fire guard (error/exit already finished the run)
         this.finish(id, run.exitCode ?? code ?? -1);
       });
-    } catch {
+    } catch (err) {
       try {
         spec?.cleanup?.(); // remove the temp file if the spec was created before spawn threw
       } catch {
         // temp file may not exist yet — nothing actionable
       }
+      // Surface the underlying error in the Activity log (mirrors the async 'error' path),
+      // then a started→failed pair so the key resolves out of "launching".
+      const message = err instanceof Error ? err.message : String(err);
       this.send({ type: 'started', buttonId: id, startedAt });
+      this.send({ type: 'output', buttonId: id, chunk: `${message}\n` });
       this.send({ type: 'exited', buttonId: id, code: -1, ranFor: Date.now() - startedAt });
     }
   }

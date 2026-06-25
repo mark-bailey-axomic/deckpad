@@ -32,7 +32,13 @@ export function loginShell(): string {
   return process.env.SHELL || '/bin/sh';
 }
 
-/** `<interpreter> "<tempPath>"` — JSON.stringify quotes the path safely (matches launchers.ts). */
+/**
+ * `<interpreter> "<tempPath>"` — JSON.stringify double-quotes the path so spaces are
+ * handled (matches launchers.ts). This is NOT a general shell escape: a double-quoted
+ * string still permits `$VAR`/command substitution. It is safe here only because the
+ * path is DeckPad-generated (`deckpad-<uuid>.<ext>` under the system temp dir), never
+ * user input — do not reuse this for untrusted strings.
+ */
 export function scriptInvocation(lang: ScriptLanguage, tempPath: string): string {
   return `${interpreterFor(lang)} ${JSON.stringify(tempPath)}`;
 }

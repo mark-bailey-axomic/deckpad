@@ -55,6 +55,15 @@ describe('resolveScriptSpawn', () => {
     });
   });
 
+  it('on POSIX with a bare sh shell, uses -c (since -l is not portable to sh/dash)', () => {
+    const spec = resolveScriptSpawn(scriptButton({ language: 'sh', script: 'echo hi' }), deps({ shell: () => '/bin/sh' }));
+    expect(spec).toMatchObject({
+      file: '/bin/sh',
+      args: ['-c', 'sh "/tmp/deckpad-uuid1.sh"'],
+      shell: false
+    });
+  });
+
   it('on win32, runs the interpreter via shell:true (inherited PATH)', () => {
     const spec = resolveScriptSpawn(scriptButton({ language: 'javascript', script: 'console.log(1)' }), deps({ platform: 'win32' }));
     expect(spec).toMatchObject({ file: 'node "/tmp/deckpad-uuid1.js"', args: [], shell: true });

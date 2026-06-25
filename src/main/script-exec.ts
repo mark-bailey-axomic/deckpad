@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { Button, ScriptLanguage } from '@shared/types';
 import type { ResolvedSpawn } from './runner';
 
@@ -48,7 +48,8 @@ export interface ScriptExecDeps {
 }
 
 export const defaultScriptExecDeps: ScriptExecDeps = {
-  writeFile: (p, d) => writeFileSync(p, d, 'utf8'),
+  // Scripts may contain secrets; create the temp file readable only by the owner (0600).
+  writeFile: (p, d) => writeFileSync(p, d, { encoding: 'utf8', mode: 0o600 }),
   remove: (p) => rmSync(p, { force: true }),
   tmpDir: tmpdir,
   uuid: randomUUID,
@@ -69,6 +70,10 @@ export function resolveScriptSpawn(button: Button, deps: ScriptExecDeps): Resolv
   if (deps.platform === 'win32') {
     return { file: inner, args: [], shell: true, cleanup };
   }
-  // POSIX GUI apps get a minimal PATH; the login shell restores the terminal's PATH.
-  return { file: deps.shell(), args: ['-lc', inner], shell: false, cleanup };
+  // POSIX GUI apps get a minimal PATH; a login shell restores the terminal's PATH.
+  // `-l` (login) isn't portable to plain POSIX sh/dash, so only use `-lc` for real
+  // login shells (zsh/bash/fish); fall back to `-c` for a bare `sh`.
+  const shellPath = deps.shell();
+  const flag = basename(shellPath) === 'sh' ? '-c' : '-lc';
+  return { file: shellPath, args: [flag, inner], shell: false, cleanup };
 }

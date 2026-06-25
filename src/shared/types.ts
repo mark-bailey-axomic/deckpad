@@ -15,7 +15,8 @@ export interface Settings {
   activityInWindow: boolean;
 }
 
-export type ButtonType = 'command' | 'file' | 'app';
+export type ButtonType = 'command' | 'script';
+export type ScriptLanguage = 'javascript' | 'typescript' | 'python' | 'sh';
 export type IconKind = 'auto' | 'letter' | 'emoji' | 'image';
 
 export interface ButtonIcon {
@@ -32,7 +33,8 @@ export interface Button {
   command?: string;
   cwd?: string;
   showTerminal?: boolean;
-  path?: string;
+  script?: string;
+  language?: ScriptLanguage;
   icon: ButtonIcon;
 }
 

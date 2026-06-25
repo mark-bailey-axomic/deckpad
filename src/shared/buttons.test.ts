@@ -23,15 +23,14 @@ describe('deriveLetters', () => {
 });
 
 describe('isUntracked', () => {
-  it('plain commands are tracked', () => {
-    expect(isUntracked(cmd())).toBe(false);
+  it('treats a script button as tracked', () => {
+    expect(isUntracked({ id: 'b', label: 'S', type: 'script', language: 'sh', script: 'echo hi', icon: { kind: 'auto' } })).toBe(false);
   });
-  it('showTerminal commands are untracked', () => {
-    expect(isUntracked(cmd({ showTerminal: true }))).toBe(true);
+  it('treats a plain command as tracked', () => {
+    expect(isUntracked({ id: 'b', label: 'C', type: 'command', command: 'ls', icon: { kind: 'auto' } })).toBe(false);
   });
-  it('file and app buttons are untracked', () => {
-    expect(isUntracked(cmd({ type: 'file', path: '/tmp/x' }))).toBe(true);
-    expect(isUntracked(cmd({ type: 'app', path: '/Applications/X.app' }))).toBe(true);
+  it('treats a command with showTerminal as untracked', () => {
+    expect(isUntracked({ id: 'b', label: 'C', type: 'command', command: 'ls', showTerminal: true, icon: { kind: 'auto' } })).toBe(true);
   });
 });
 

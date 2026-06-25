@@ -56,8 +56,6 @@ export function ActivityPanel({ open, items, now, accent, onStop, onClose }: Act
           const elapsed = failed
             ? (it.ranFor ?? 0) / 1000
             : Math.max(0, (now - (it.startedAt ?? now)) / 1000);
-          const iconName = it.button.type === 'file' ? 'file' : it.button.type === 'app' ? 'app' : 'terminal';
-
           return (
             <div className="dp-act" key={it.button.id}>
               <div className="dp-act-top">
@@ -65,7 +63,7 @@ export function ActivityPanel({ open, items, now, accent, onStop, onClose }: Act
                   className={'dp-act-icon' + (failed ? ' is-failed' : '')}
                   style={!failed ? { color: accent } : undefined}
                 >
-                  <DeckIcon name={iconName} size={18} />
+                  <DeckIcon name="terminal" size={18} />
                 </span>
                 <div className="dp-act-meta">
                   <div className="dp-act-label">

@@ -2,7 +2,7 @@ import { useEffect, useState, type DragEvent, type MouseEvent, type ReactElement
 import { deriveLetters } from '@shared/buttons';
 import type { Button, KeyRuntime } from '@shared/types';
 import { fmtElapsed } from '@renderer/lib/format';
-import { autoIconUrl, customIconUrl } from '@renderer/lib/icon-urls';
+import { customIconUrl } from '@renderer/lib/icon-urls';
 import { DeckIcon, type DeckIconName } from './DeckIcon';
 
 export interface KeyProps {
@@ -24,12 +24,12 @@ export interface KeyProps {
   onDrop: (e: DragEvent) => void;
 }
 
-const TYPE_GLYPH: Record<Button['type'], DeckIconName> = { command: 'terminal', file: 'file', app: 'app' };
+const TYPE_GLYPH: Record<Button['type'], DeckIconName> = { command: 'terminal', script: 'terminal' };
 
 function KeyGlyph({ button, accent }: { button: Button; accent: string }): ReactElement {
   const { icon } = button;
   const [imgFailed, setImgFailed] = useState(false);
-  useEffect(() => setImgFailed(false), [button.id, icon.kind, icon.sourcePath, button.path]);
+  useEffect(() => setImgFailed(false), [button.id, icon.kind, icon.sourcePath]);
   const letters = deriveLetters(button.label);
 
   if (icon.kind === 'letter' || imgFailed) {
@@ -40,11 +40,7 @@ function KeyGlyph({ button, accent }: { button: Button; accent: string }): React
     return <img className="dp-key-img" src={customIconUrl(button.id, icon.sourcePath)} alt=""
       width={30} height={30} onError={() => setImgFailed(true)} />;
   }
-  // kind === 'auto': real OS icon for file/app paths, terminal/type glyph for commands
-  if ((button.type === 'file' || button.type === 'app') && button.path) {
-    return <img className="dp-key-img" src={autoIconUrl(button.id)} alt=""
-      width={30} height={30} onError={() => setImgFailed(true)} />;
-  }
+  // kind === 'auto': type glyph (terminal) for command/script buttons.
   return <DeckIcon name={TYPE_GLYPH[button.type]} size={30} />;
 }
 

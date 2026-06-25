@@ -155,7 +155,7 @@ describe('validateConfig', () => {
 
   it('rejects a slot Button with invalid type', () => {
     const cfg = defaultConfig() as any;
-    cfg.groups[0].slots[0] = { id: 'x', label: 'X', type: 'script', icon: { kind: 'auto' } };
+    cfg.groups[0].slots[0] = { id: 'x', label: 'X', type: 'app', icon: { kind: 'auto' } };
     expect(validateConfig(cfg)).toBe(false);
   });
 
@@ -167,7 +167,7 @@ describe('validateConfig', () => {
 
   it('rejects a slot Button with missing icon', () => {
     const cfg = defaultConfig() as any;
-    cfg.groups[0].slots[0] = { id: 'x', label: 'X', type: 'app' };
+    cfg.groups[0].slots[0] = { id: 'x', label: 'X', type: 'command' };
     expect(validateConfig(cfg)).toBe(false);
   });
 
@@ -183,7 +183,7 @@ describe('validateConfig', () => {
   it('accepts all valid icon kinds', () => {
     for (const kind of ['auto', 'letter', 'emoji', 'image'] as const) {
       const cfg = defaultConfig() as any;
-      cfg.groups[0].slots[0] = { id: 'x', label: 'X', type: 'file', icon: { kind } };
+      cfg.groups[0].slots[0] = { id: 'x', label: 'X', type: 'command', icon: { kind } };
       expect(validateConfig(cfg)).toBe(true);
     }
   });
@@ -270,17 +270,6 @@ describe('validateConfig', () => {
     expect(validateConfig(cfg)).toBe(false);
   });
 
-  it('rejects a button where path is an array instead of a string', () => {
-    const cfg = defaultConfig() as any;
-    cfg.groups[0].slots[0] = {
-      id: 'b1',
-      label: 'X',
-      type: 'file',
-      path: [],
-      icon: { kind: 'auto' }
-    };
-    expect(validateConfig(cfg)).toBe(false);
-  });
 
   it('rejects a button where icon.emoji is a number instead of a string', () => {
     const cfg = defaultConfig() as any;
@@ -311,8 +300,7 @@ describe('validateConfig', () => {
     cfg.groups[0].slots[0] = {
       id: 'b1',
       label: 'X',
-      type: 'app',
-      path: '/Applications/Foo.app',
+      type: 'command',
       icon: { kind: 'image', sourcePath: 1 }
     };
     expect(validateConfig(cfg)).toBe(false);
@@ -332,18 +320,53 @@ describe('validateConfig', () => {
     expect(validateConfig(cfg)).toBe(true);
   });
 
-  // Per-type required payload deliberately NOT enforced here: the modal lets a
-  // user save before picking a path/command (Save is gated on label only), so a
-  // payload-less button is a legal persisted state the runner handles gracefully.
-  it("accepts type:'file' without a path field (saved before picking)", () => {
+  it('accepts a valid script button', () => {
     const cfg = defaultConfig() as any;
     cfg.groups[0].slots[0] = {
-      id: 'b1',
-      label: 'X',
-      type: 'file',
-      icon: { kind: 'auto' }
+      id: 'b1', label: 'Build', type: 'script',
+      language: 'python', script: 'print("hi")', icon: { kind: 'auto' }
     };
     expect(validateConfig(cfg)).toBe(true);
+  });
+
+  it('rejects a script button with no language', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1', label: 'Build', type: 'script', script: 'print("hi")', icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('rejects a script button with an unknown language', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1', label: 'Build', type: 'script', language: 'ruby', script: 'puts 1', icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('rejects a script button with an empty script body', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1', label: 'Build', type: 'script', language: 'sh', script: '', icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('rejects a script button whose body is only whitespace', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1', label: 'Build', type: 'script', language: 'sh', script: '   \n\t', icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
+  });
+
+  it('rejects a button with the removed "file" type', () => {
+    const cfg = defaultConfig() as any;
+    cfg.groups[0].slots[0] = {
+      id: 'b1', label: 'X', type: 'file', icon: { kind: 'auto' }
+    };
+    expect(validateConfig(cfg)).toBe(false);
   });
 
   // ---------------------------------------------------------------------------

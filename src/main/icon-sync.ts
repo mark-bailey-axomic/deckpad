@@ -1,7 +1,7 @@
 import { existsSync, unlinkSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import type { Button, Config } from '@shared/types';
-import { copyCustomImage, deleteIconFiles, duplicateIconFiles } from './icons';
+import { copyCustomImage, deleteIconFiles } from './icons';
 
 function buttonsOf(cfg: Config): Map<string, Button> {
   const map = new Map<string, Button>();
@@ -40,11 +40,6 @@ export function syncIconCache(prev: Config, next: Config, iconsDir: string): voi
         }
         copyCustomImage(iconsDir, b.icon.sourcePath, id);
       }
-    }
-    // 3. Duplicates: new auto button sharing a path with a surviving button → copy its cache.
-    if (!before.has(id) && b.icon.kind === 'auto' && b.path) {
-      const source = [...after.values()].find((o) => o.id !== id && o.path === b.path && before.has(o.id));
-      if (source) duplicateIconFiles(iconsDir, source.id, id);
     }
   }
 }

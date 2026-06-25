@@ -47,14 +47,6 @@ describe('syncIconCache', () => {
     expect(() => syncIconCache(cfgWith(), next, iconsDir)).not.toThrow();
   });
 
-  it('duplicated buttons (new id, same path as an existing auto button) get the PNG copied under the new id', () => {
-    writeFileSync(join(iconsDir, 'orig.png'), 'pngdata');
-    const orig = btn('orig', { type: 'app', path: '/Applications/X.app' });
-    const dupe = btn('dupe', { type: 'app', path: '/Applications/X.app' });
-    syncIconCache(cfgWith(orig), cfgWith(orig, dupe), iconsDir);
-    expect(readFileSync(join(iconsDir, 'dupe.png'), 'utf8')).toBe('pngdata');
-  });
-
   it('does nothing when configs are identical', () => {
     const cfg = cfgWith(btn('b1'));
     expect(() => syncIconCache(cfg, cfg, iconsDir)).not.toThrow();

@@ -10,9 +10,10 @@ export function deriveLetters(label: string): string {
     .join('');
 }
 
-/** Untracked actions get a launching flash only — no runner registry entry. */
+/** Untracked = launch-and-forget in a terminal window. Only a command with
+ *  showTerminal qualifies; scripts and plain commands run tracked through the Runner. */
 export function isUntracked(button: Button): boolean {
-  return button.type !== 'command' || button.showTerminal === true;
+  return button.type === 'command' && button.showTerminal === true;
 }
 
 export function findButton(config: Config, id: string): Button | null {
